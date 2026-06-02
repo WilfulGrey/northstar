@@ -68,7 +68,7 @@ export function CommandPalette() {
     const found: Cmd[] = []
     if (q) {
       objectives.filter((o) => match(o.title)).slice(0, 5).forEach((o) =>
-        found.push({ id: `o-${o.id}`, label: o.title, hint: 'Objective', run: () => go('/okrs') }),
+        found.push({ id: `o-${o.id}`, label: o.title, hint: 'Objective', run: () => go('/okrs', { openObjective: o.id }) }),
       )
       epics.filter((e) => match(e.title)).slice(0, 5).forEach((e) =>
         found.push({ id: `e-${e.id}`, label: e.title, hint: 'Epic', run: () => go('/epics') }),

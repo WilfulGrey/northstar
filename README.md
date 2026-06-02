@@ -43,6 +43,19 @@ on the right things?*
 3. **Command palette (⌘K)** — search objectives/epics/stories and quick-create from
    anywhere. The keyboard-first UX a daily driver needs.
 
+## What's new in v1.2 — "the whole telescope + the rhythm of progress"
+
+1. **Key-result check-ins (progress history).** Weekly check-ins are the heartbeat of OKRs.
+   A KR is no longer a single "current" number — each check-in records a **value, a
+   confidence call (on track / at risk / off track) and a note**, so the key-result detail
+   shows the trend and the story behind it. Updating the value during a check-in preserves
+   history (table `kr_checkins`).
+2. **Objective rollup view.** Click any objective to telescope from goal to ground in one
+   screen: each KR (lagging + leading), the epics serving it, the contributing stories, and
+   an **objective-level leading indicator** (work-done across everything that drives it).
+3. **My Work.** A personal home: stories assigned to me grouped by status — with the same
+   alignment flag, so I can see whether *my* week maps to a goal — plus the objectives I own.
+
 ## Product decisions (and what I deliberately left out)
 
 - **One shared workspace, not multi-tenant.** A small team is the unit. RLS gives every
@@ -72,8 +85,9 @@ entire backend authorization layer** — see `supabase/migrations`.
 ## Data model
 
 `profiles` · `cycles` · `objectives` · `key_results` · `epics` · `stories` ·
-`comments` · `activity` — full schema, enums, triggers, RLS policies and the Realtime
-publication live in [`supabase/migrations/`](supabase/migrations) (v1.0 init + v1.1).
+`comments` · `activity` · `kr_checkins` — full schema, enums, triggers, RLS policies and
+the Realtime publication live in [`supabase/migrations/`](supabase/migrations)
+(v1.0 init + v1.1 + v1.2).
 
 ## Run it locally
 
@@ -123,7 +137,7 @@ src/
   components/   Layout, Modal, Avatar, ProgressBar, badges, states
   lib/          supabase client, types, progress/alignment math, React Query hooks
   modals/       create/edit forms for objectives, key results, epics, stories
-  pages/        Login, Dashboard (alignment), OKRs, Epics, Board
+  pages/        Login, Dashboard (alignment), My Work, OKRs, Epics, Board
 supabase/migrations/   Postgres schema + RLS
 scripts/seed.mjs       idempotent demo seed
 e2e/                   Playwright specs

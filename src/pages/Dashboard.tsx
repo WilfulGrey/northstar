@@ -6,10 +6,11 @@ import { Avatar } from '@/components/Avatar'
 import { ObjectiveStatusBadge, PriorityIcon } from '@/components/Badges'
 import { ErrorState, Spinner } from '@/components/States'
 import { StoryDetail } from '@/components/StoryDetail'
+import { ObjectiveDetail } from '@/components/ObjectiveDetail'
 import { useAuth } from '@/auth/AuthProvider'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
 import { alignment, displayName, epicAlignmentMap, isStoryAligned, objectiveProgress, pct } from '@/lib/format'
-import { ACTIVE_STORY_STATUSES } from '@/lib/types'
+import { ACTIVE_STORY_STATUSES, type ObjectiveFull } from '@/lib/types'
 
 export function Dashboard() {
   const { profile } = useAuth()
@@ -17,6 +18,7 @@ export function Dashboard() {
   const epicsQ = useEpics()
   const storiesQ = useStories()
   const [openStoryId, setOpenStoryId] = useState<string | null>(null)
+  const [openObj, setOpenObj] = useState<ObjectiveFull | null>(null)
 
   const objectives = objectivesQ.data ?? []
   const epics = epicsQ.data ?? []
@@ -74,7 +76,11 @@ export function Dashboard() {
                     <p className="p-4 text-sm text-zinc-400">No objectives yet.</p>
                   ) : (
                     objectives.map((o) => (
-                      <div key={o.id} className="flex items-center gap-4 p-4">
+                      <button
+                        key={o.id}
+                        onClick={() => setOpenObj(o)}
+                        className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-zinc-50"
+                      >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <p className="truncate text-sm font-medium text-zinc-800">{o.title}</p>
@@ -85,7 +91,7 @@ export function Dashboard() {
                           </div>
                         </div>
                         <Avatar profile={o.owner} size={26} />
-                      </div>
+                      </button>
                     ))
                   )}
                 </div>
@@ -143,6 +149,7 @@ export function Dashboard() {
       </div>
 
       {openStoryId && <StoryDetail storyId={openStoryId} onClose={() => setOpenStoryId(null)} />}
+      {openObj && <ObjectiveDetail objective={openObj} onClose={() => setOpenObj(null)} />}
     </>
   )
 }

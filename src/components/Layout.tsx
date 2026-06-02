@@ -8,6 +8,7 @@ import { displayName } from '@/lib/format'
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true, icon: HomeIcon },
+  { to: '/mywork', label: 'My Work', icon: UserIcon },
   { to: '/okrs', label: 'OKRs', icon: TargetIcon },
   { to: '/epics', label: 'Epics', icon: LayersIcon },
   { to: '/board', label: 'Board', icon: BoardIcon },
@@ -114,4 +115,7 @@ function LogoutIcon() {
 }
 function SearchIcon() {
   return base(<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>)
+}
+function UserIcon() {
+  return base(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>)
 }

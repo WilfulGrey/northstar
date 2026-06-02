@@ -3,11 +3,13 @@ import { useEffect } from 'react'
 import { supabase } from './supabase'
 import type {
   Activity,
+  CheckinConfidence,
   Comment,
   Cycle,
   Epic,
   EpicFull,
   KeyResult,
+  KrCheckin,
   ObjectiveFull,
   Profile,
   Story,
@@ -22,6 +24,7 @@ export const keys = {
   stories: ['stories'] as const,
   comments: (storyId: string) => ['comments', storyId] as const,
   activity: (storyId: string) => ['activity', storyId] as const,
+  checkins: (krId: string) => ['checkins', krId] as const,
 }
 
 function throwOnError<T>({ data, error }: { data: T | null; error: { message: string } | null }): T {
@@ -115,6 +118,20 @@ export function useActivity(storyId: string) {
           .select('*, actor:profiles(*)')
           .eq('story_id', storyId)
           .order('created_at', { ascending: true }),
+      ),
+  })
+}
+
+export function useKrCheckins(keyResultId: string) {
+  return useQuery({
+    queryKey: keys.checkins(keyResultId),
+    queryFn: async () =>
+      throwOnError<KrCheckin[]>(
+        await supabase
+          .from('kr_checkins')
+          .select('*, author:profiles(*)')
+          .eq('key_result_id', keyResultId)
+          .order('created_at', { ascending: false }),
       ),
   })
 }
@@ -216,6 +233,21 @@ export function useDeleteStory() {
   )
 }
 
+// KR check-ins — records history AND advances the key result's current value.
+export function useAddCheckin(keyResultId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: { value: number; confidence: CheckinConfidence; note: string | null; author_id: string }) => {
+      throwOnError(await supabase.from('kr_checkins').insert({ key_result_id: keyResultId, ...input }).select().single())
+      throwOnError(await supabase.from('key_results').update({ current_value: input.value }).eq('id', keyResultId).select().single())
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.checkins(keyResultId) })
+      qc.invalidateQueries({ queryKey: keys.objectives })
+    },
+  })
+}
+
 // Comments
 export function useAddComment(storyId: string) {
   const qc = useQueryClient()
@@ -267,6 +299,10 @@ export function useRealtimeSync() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'key_results' }, () => invalidate(qc, keys.objectives))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => invalidate(qc, ['comments']))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity' }, () => invalidate(qc, ['activity']))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'kr_checkins' }, () => {
+        invalidate(qc, ['checkins'])
+        invalidate(qc, keys.objectives)
+      })
       .subscribe()
     return () => {
       supabase.removeChannel(channel)

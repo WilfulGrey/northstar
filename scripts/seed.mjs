@@ -112,6 +112,26 @@ async function main() {
   )
   const krId = Object.fromEntries(krDefs.map((k, i) => [k.key, krs[i].id]))
 
+  console.log('→ adding KR check-ins (progress history)…')
+  const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString()
+  const checkinDefs = [
+    ['activation', 'maya', 25, 'on_track', 'Onboarding checklist live for ~half of new signups.', 21],
+    ['activation', 'maya', 33, 'on_track', 'Sample workspace pushed activation up again.', 14],
+    ['activation', 'demo', 41, 'at_risk', 'Plateauing a bit — the invite flow is the next lever.', 7],
+    ['incidents', 'leo', 9, 'on_track', 'Sentry in place, working through the long tail.', 18],
+    ['incidents', 'leo', 7, 'on_track', 'Fixed two recurring crashers.', 11],
+    ['incidents', 'leo', 5, 'at_risk', 'Uptime alerts surfaced a flaky dependency.', 4],
+    ['wat', 'demo', 8, 'on_track', 'Two design partners onboarded.', 20],
+    ['wat', 'leo', 11, 'on_track', 'Word of mouth after the realtime demo.', 10],
+    ['wat', 'demo', 14, 'on_track', 'Steady growth — retention is the next focus.', 3],
+  ]
+  await insert(
+    'kr_checkins',
+    checkinDefs.map(([kr, who, value, confidence, note, d]) => ({
+      key_result_id: krId[kr], author_id: ids[who], value, confidence, note, created_at: daysAgo(d),
+    })),
+  )
+
   console.log('→ creating epics…')
   const epicDefs = [
     { key: 'onboarding', title: 'Onboarding & activation flow', obj: 'daily', kr: 'activation', owner: 'maya', status: 'in_progress', color: '#ec4899' },
@@ -188,7 +208,7 @@ async function main() {
       .map(([title, who, body]) => ({ story_id: storyByTitle[title], author_id: ids[who], body })),
   )
 
-  console.log(`\n✓ Seed complete: ${objectiveDefs.length} objectives, ${krDefs.length} key results, ${epicDefs.length} epics, ${storyDefs.length} stories, ${comments.length} comments.`)
+  console.log(`\n✓ Seed complete: ${objectiveDefs.length} objectives, ${krDefs.length} key results, ${checkinDefs.length} check-ins, ${epicDefs.length} epics, ${storyDefs.length} stories, ${comments.length} comments.`)
   console.log(`  Sign in as ${TEAM[0].email} / ${PASSWORD}`)
 }
 

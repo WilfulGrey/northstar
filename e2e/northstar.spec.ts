@@ -47,7 +47,7 @@ test('creates an objective and adds a key result to it', async ({ page }) => {
   await page.getByLabel('Objective title').fill(objTitle)
   await page.getByRole('button', { name: 'Create objective', exact: true }).click()
 
-  const card = page.locator('div.card').filter({ has: page.getByRole('heading', { name: objTitle }) }).first()
+  const card = page.locator('div.card').filter({ hasText: objTitle }).first()
   await expect(card).toBeVisible()
 
   const krTitle = uniq('E2E key result')
@@ -133,6 +133,42 @@ test('command palette searches and navigates', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/board$/)
   await expect(page.getByTestId('column-backlog')).toBeVisible()
+})
+
+// ---------------- v1.2 ----------------
+
+test('posts a key-result check-in and records the history', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'OKRs', exact: true }).click()
+
+  await page.getByRole('button', { name: /Team NPS/ }).click() // open KR detail
+  await page.getByLabel('Check-in value').fill('44')
+  const note = uniq('e2e check-in')
+  await page.getByLabel('Check-in note').fill(note)
+  await page.getByRole('button', { name: 'Post check-in', exact: true }).click()
+
+  await expect(page.getByTestId('checkin-history').getByText(note)).toBeVisible()
+  // Team NPS: 30 → 50, so a value of 44 is 70%.
+  await expect(page.getByTestId('kr-lagging')).toHaveText('70%')
+})
+
+test('opens an objective rollup with leading indicator and serving epics', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'OKRs', exact: true }).click()
+
+  await page.getByRole('button', { name: /Make Northstar the team/ }).click()
+  await expect(page.getByTestId('objective-leading')).toBeVisible()
+  await expect(page.getByText(/Epics serving this objective \(\d+\)/)).toBeVisible()
+  await expect(page.getByText('Onboarding & activation flow')).toBeVisible()
+})
+
+test('My Work lists the stories assigned to me', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'My Work', exact: true }).click()
+
+  await expect(page.getByRole('heading', { name: 'My Work' })).toBeVisible()
+  await expect(page.getByText('Postmortem template & on-call rota')).toBeVisible()
+  await expect(page.getByText('Clean up unused feature flags')).toBeVisible()
 })
 
 test('lists unaligned in-flight work on the dashboard', async ({ page }) => {

@@ -8,6 +8,7 @@ import { Layout } from './components/Layout'
 import { Spinner } from './components/States'
 import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
+import { MyWork } from './pages/MyWork'
 import { Okrs } from './pages/Okrs'
 import { Epics } from './pages/Epics'
 import { Board } from './pages/Board'
@@ -37,6 +38,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route element={<Protected />}>
         <Route index element={<Dashboard />} />
+        <Route path="mywork" element={<MyWork />} />
         <Route path="okrs" element={<Okrs />} />
         <Route path="epics" element={<Epics />} />
         <Route path="board" element={<Board />} />

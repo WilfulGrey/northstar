@@ -59,6 +59,19 @@ export interface Epic {
   updated_at: string
 }
 
+export type CheckinConfidence = 'on_track' | 'at_risk' | 'off_track'
+
+export interface KrCheckin {
+  id: string
+  key_result_id: string
+  author_id: string | null
+  value: number
+  confidence: CheckinConfidence
+  note: string | null
+  created_at: string
+  author?: Profile | null
+}
+
 export type ActivityType = 'created' | 'status_changed' | 'assignee_changed' | 'priority_changed' | 'epic_changed'
 
 export interface Comment {
@@ -157,6 +170,12 @@ export const STORY_PRIORITY: Record<StoryPriority, { label: string; rank: number
   medium: { label: 'Medium', rank: 2, text: 'text-amber-500', icon: '=' },
   low: { label: 'Low', rank: 3, text: 'text-zinc-400', icon: '⬇' },
   none: { label: 'No priority', rank: 4, text: 'text-zinc-300', icon: '–' },
+}
+
+export const CHECKIN_CONFIDENCE: Record<CheckinConfidence, { label: string; dot: string; text: string; bg: string }> = {
+  on_track: { label: 'On track', dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
+  at_risk: { label: 'At risk', dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
+  off_track: { label: 'Off track', dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50' },
 }
 
 export const KR_METRIC: Record<KrMetric, { label: string }> = {

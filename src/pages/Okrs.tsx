@@ -8,13 +8,14 @@ import { EmptyState, ErrorState, Spinner } from '@/components/States'
 import { ObjectiveModal } from '@/modals/ObjectiveModal'
 import { KeyResultModal } from '@/modals/KeyResultModal'
 import { KeyResultDetail } from '@/components/KeyResultDetail'
+import { ObjectiveDetail } from '@/components/ObjectiveDetail'
 import {
   useDeleteKeyResult,
   useDeleteObjective,
   useObjectives,
   useUpdateKeyResult,
 } from '@/lib/api'
-import { formatMetric, krProgress, objectiveProgress, pct } from '@/lib/format'
+import { formatMetric, krProgress, objectiveProgress, pct, timeAgo } from '@/lib/format'
 import type { KeyResult, ObjectiveFull } from '@/lib/types'
 
 export function Okrs() {
@@ -22,14 +23,21 @@ export function Okrs() {
   const [newOpen, setNewOpen] = useState(false)
   const [edit, setEdit] = useState<ObjectiveFull | null>(null)
   const [detailKr, setDetailKr] = useState<KeyResult | null>(null)
+  const [detailObj, setDetailObj] = useState<ObjectiveFull | null>(null)
   const location = useLocation()
 
   useEffect(() => {
-    if ((location.state as { quickCreate?: string } | null)?.quickCreate === 'objective') {
+    const state = location.state as { quickCreate?: string; openObjective?: string } | null
+    if (state?.quickCreate === 'objective') {
       setNewOpen(true)
       window.history.replaceState({}, '')
     }
-  }, [location.state])
+    if (state?.openObjective && objectives) {
+      const found = objectives.find((o) => o.id === state.openObjective)
+      if (found) setDetailObj(found)
+      window.history.replaceState({}, '')
+    }
+  }, [location.state, objectives])
 
   const groups = useMemo(() => groupByCycle(objectives ?? []), [objectives])
 
@@ -66,7 +74,13 @@ export function Okrs() {
                 <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">{group.name}</h2>
                 <div className="space-y-4">
                   {group.objectives.map((o) => (
-                    <ObjectiveCard key={o.id} objective={o} onEdit={() => setEdit(o)} onOpenKr={setDetailKr} />
+                    <ObjectiveCard
+                      key={o.id}
+                      objective={o}
+                      onEdit={() => setEdit(o)}
+                      onOpenKr={setDetailKr}
+                      onOpenDetail={() => setDetailObj(o)}
+                    />
                   ))}
                 </div>
               </section>
@@ -78,6 +92,7 @@ export function Okrs() {
       {newOpen && <ObjectiveModal open onClose={() => setNewOpen(false)} />}
       {edit && <ObjectiveModal open objective={edit} onClose={() => setEdit(null)} />}
       {detailKr && <KeyResultDetail keyResult={detailKr} onClose={() => setDetailKr(null)} />}
+      {detailObj && <ObjectiveDetail objective={detailObj} onClose={() => setDetailObj(null)} />}
     </>
   )
 }
@@ -86,10 +101,12 @@ function ObjectiveCard({
   objective,
   onEdit,
   onOpenKr,
+  onOpenDetail,
 }: {
   objective: ObjectiveFull
   onEdit: () => void
   onOpenKr: (kr: KeyResult) => void
+  onOpenDetail: () => void
 }) {
   const [addKr, setAddKr] = useState(false)
   const [editKr, setEditKr] = useState<KeyResult | null>(null)
@@ -101,7 +118,9 @@ function ObjectiveCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-zinc-900">{objective.title}</h3>
+            <button className="text-left text-base font-semibold text-zinc-900 hover:text-indigo-600" onClick={onOpenDetail} title="View rollup">
+              {objective.title}
+            </button>
             <ObjectiveStatusBadge status={objective.status} />
           </div>
           {objective.description && <p className="mt-1 text-sm text-zinc-500">{objective.description}</p>}
@@ -176,6 +195,7 @@ function KeyResultRow({ kr, onEdit, onOpenDetail }: { kr: KeyResult; onEdit: () 
         <div className="mt-1.5 flex items-center gap-3">
           <ProgressBar ratio={ratio} className="max-w-[220px]" />
           <span className="text-xs font-medium tabular-nums text-zinc-500">{pct(ratio)}</span>
+          <span className="hidden text-xs text-zinc-400 sm:inline">· updated {timeAgo(kr.updated_at)}</span>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5 text-sm text-zinc-500">
