@@ -87,13 +87,52 @@ test('creates a story and moves it across the board', async ({ page }) => {
   const inBacklog = page.getByTestId('column-backlog').locator(`[data-story-title="${storyTitle}"]`)
   await expect(inBacklog).toBeVisible()
 
-  // Open the card and move it to "In progress".
+  // Open the card (detail drawer) and move it to "In progress" — inline, no save button.
   await inBacklog.click()
   await page.getByLabel('Story status').selectOption({ label: 'In progress' })
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.keyboard.press('Escape') // close the drawer
 
   await expect(page.getByTestId('column-in_progress').locator(`[data-story-title="${storyTitle}"]`)).toBeVisible()
   await expect(page.getByTestId('column-backlog').locator(`[data-story-title="${storyTitle}"]`)).toHaveCount(0)
+})
+
+// ---------------- v1.1 ----------------
+
+test('opens a story, comments, and logs activity on status change', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+
+  await page.locator('[data-story-title="Postmortem template & on-call rota"]').click()
+
+  const note = uniq('e2e comment')
+  await page.getByLabel('Add a comment').fill(note)
+  await page.getByRole('button', { name: 'Comment', exact: true }).click()
+  await expect(page.getByTestId('timeline').getByText(note)).toBeVisible()
+
+  // Changing a property writes an activity entry (server-side trigger).
+  await page.getByLabel('Story status').selectOption({ label: 'In review' })
+  await expect(page.getByTestId('timeline').getByText(/moved/)).toBeVisible()
+})
+
+test('key result detail shows the leading indicator and contributing work', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'OKRs', exact: true }).click()
+
+  await page.getByRole('button', { name: /Activation rate/ }).click()
+  await expect(page.getByTestId('kr-leading')).toBeVisible()
+  await expect(page.getByText(/Contributing work \(\d+\)/)).toBeVisible()
+})
+
+test('command palette searches and navigates', async ({ page }) => {
+  await login(page)
+  await page.getByRole('button', { name: /Search/ }).click()
+
+  await page.getByLabel('Command menu').fill('Sentry')
+  // Clicking the result auto-waits for the stories query to populate it.
+  await page.getByRole('button', { name: /Add Sentry error tracking/ }).click()
+
+  await expect(page).toHaveURL(/\/board$/)
+  await expect(page.getByTestId('column-backlog')).toBeVisible()
 })
 
 test('lists unaligned in-flight work on the dashboard', async ({ page }) => {

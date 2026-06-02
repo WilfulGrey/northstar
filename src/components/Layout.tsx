@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthProvider'
 import { Avatar } from './Avatar'
+import { CommandPalette, CMDK_EVENT } from './CommandPalette'
 import { useRealtimeSync } from '@/lib/api'
 import { displayName } from '@/lib/format'
 
@@ -22,6 +23,17 @@ export function Layout() {
         <div className="flex items-center gap-2 px-5 py-4">
           <img src="/star.svg" alt="" className="h-6 w-6" />
           <span className="text-sm font-semibold tracking-tight text-zinc-900">Northstar</span>
+        </div>
+
+        <div className="px-3 pb-1">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent(CMDK_EVENT))}
+            className="flex w-full items-center gap-2 rounded-md border border-zinc-200 px-2.5 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-600"
+          >
+            <SearchIcon />
+            Search
+            <span className="ml-auto rounded border border-zinc-200 px-1 text-[11px] text-zinc-400">⌘K</span>
+          </button>
         </div>
 
         <nav className="flex-1 space-y-0.5 px-3 py-2">
@@ -59,6 +71,8 @@ export function Layout() {
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Outlet />
       </main>
+
+      <CommandPalette />
     </div>
   )
 }
@@ -97,4 +111,7 @@ function BoardIcon() {
 }
 function LogoutIcon() {
   return base(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>)
+}
+function SearchIcon() {
+  return base(<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>)
 }

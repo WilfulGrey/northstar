@@ -114,19 +114,21 @@ async function main() {
 
   console.log('→ creating epics…')
   const epicDefs = [
-    { key: 'onboarding', title: 'Onboarding & activation flow', obj: 'daily', owner: 'maya', status: 'in_progress', color: '#ec4899' },
-    { key: 'realtime', title: 'Realtime collaboration', obj: 'daily', owner: 'leo', status: 'planned', color: '#6366f1' },
-    { key: 'reliability', title: 'Reliability & observability', obj: 'platform', owner: 'leo', status: 'in_progress', color: '#ef4444' },
-    { key: 'perf', title: 'Performance pass', obj: 'platform', owner: 'leo', status: 'backlog', color: '#f59e0b' },
-    { key: 'design', title: 'Design system & micro-interactions', obj: 'delight', owner: 'maya', status: 'in_progress', color: '#8b5cf6' },
-    { key: 'cmdk', title: 'Command palette & shortcuts', obj: 'delight', owner: 'sofia', status: 'planned', color: '#0ea5e9' },
-    { key: 'tooling', title: 'Internal tooling cleanup', obj: null, owner: 'sofia', status: 'backlog', color: '#64748b' },
+    { key: 'onboarding', title: 'Onboarding & activation flow', obj: 'daily', kr: 'activation', owner: 'maya', status: 'in_progress', color: '#ec4899' },
+    { key: 'realtime', title: 'Realtime collaboration', obj: 'daily', kr: 'wat', owner: 'leo', status: 'planned', color: '#6366f1' },
+    { key: 'reliability', title: 'Reliability & observability', obj: 'platform', kr: 'incidents', owner: 'leo', status: 'in_progress', color: '#ef4444' },
+    { key: 'perf', title: 'Performance pass', obj: 'platform', kr: 'latency', owner: 'leo', status: 'backlog', color: '#f59e0b' },
+    { key: 'design', title: 'Design system & micro-interactions', obj: 'delight', kr: 'ttc', owner: 'maya', status: 'in_progress', color: '#8b5cf6' },
+    { key: 'cmdk', title: 'Command palette & shortcuts', obj: 'delight', kr: 'ttc', owner: 'sofia', status: 'planned', color: '#0ea5e9' },
+    { key: 'tooling', title: 'Internal tooling cleanup', obj: null, kr: null, owner: 'sofia', status: 'backlog', color: '#64748b' },
   ]
   const epics = await insert(
     'epics',
     epicDefs.map((e) => ({
       title: e.title, status: e.status, color: e.color,
-      objective_id: e.obj ? objId[e.obj] : null, owner_id: ids[e.owner],
+      objective_id: e.obj ? objId[e.obj] : null,
+      key_result_id: e.kr ? krId[e.kr] : null,
+      owner_id: ids[e.owner],
     })),
   )
   const epicId = Object.fromEntries(epicDefs.map((e, i) => [e.key, epics[i].id]))
@@ -161,7 +163,7 @@ async function main() {
     ['Clean up unused feature flags', 'todo', 'low', 1, 'tooling', 'demo', null],
     ['Spike: evaluate analytics vendors', 'todo', 'low', 2, null, 'demo', null],
   ]
-  await insert(
+  const insertedStories = await insert(
     'stories',
     storyDefs.map(([title, status, priority, estimate, epic, assignee, kr], i) => ({
       title, status, priority, estimate,
@@ -171,8 +173,22 @@ async function main() {
       position: i,
     })),
   )
+  const storyByTitle = Object.fromEntries(insertedStories.map((s) => [s.title, s.id]))
 
-  console.log(`\n✓ Seed complete: ${objectiveDefs.length} objectives, ${krDefs.length} key results, ${epicDefs.length} epics, ${storyDefs.length} stories.`)
+  console.log('→ adding a few comments…')
+  const comments = [
+    ['Health-check & uptime alerts', 'leo', 'Uptime checks are live and alerting to #oncall. Want a runbook link before we close this.'],
+    ['Health-check & uptime alerts', 'demo', "Great. I'll fold the runbook into the postmortem template story."],
+    ['Seed a sample workspace on signup', 'maya', 'Sample workspace lands on first login. Open question: do we wipe it once a real story is created?'],
+  ]
+  await insert(
+    'comments',
+    comments
+      .filter(([title]) => storyByTitle[title])
+      .map(([title, who, body]) => ({ story_id: storyByTitle[title], author_id: ids[who], body })),
+  )
+
+  console.log(`\n✓ Seed complete: ${objectiveDefs.length} objectives, ${krDefs.length} key results, ${epicDefs.length} epics, ${storyDefs.length} stories, ${comments.length} comments.`)
   console.log(`  Sign in as ${TEAM[0].email} / ${PASSWORD}`)
 }
 

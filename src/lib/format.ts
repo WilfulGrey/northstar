@@ -35,21 +35,52 @@ export function epicProgress(epicId: string, stories: Pick<Story, 'epic_id' | 's
 }
 
 /**
+ * Is this story connected to a goal? Either directly (story.key_result_id) or
+ * through an epic that points at an objective or a key result.
+ */
+export function isStoryAligned(
+  story: Pick<Story, 'epic_id' | 'key_result_id'>,
+  epicAligned: Map<string, boolean>,
+): boolean {
+  return story.key_result_id != null || (story.epic_id != null && !!epicAligned.get(story.epic_id))
+}
+
+export function epicAlignmentMap(epics: Pick<Epic, 'id' | 'objective_id' | 'key_result_id'>[]): Map<string, boolean> {
+  return new Map(epics.map((e) => [e.id, e.objective_id != null || e.key_result_id != null]))
+}
+
+/**
  * Alignment: of the work that is in flight right now, how much is connected
- * to an objective (via its epic). This is Northstar's headline metric.
+ * to an objective (via its epic or a key result). Northstar's headline metric.
  */
 export function alignment(
   stories: Pick<Story, 'status' | 'epic_id' | 'key_result_id'>[],
-  epics: Pick<Epic, 'id' | 'objective_id'>[],
+  epics: Pick<Epic, 'id' | 'objective_id' | 'key_result_id'>[],
 ): { aligned: number; total: number; ratio: number } {
-  const epicToObjective = new Map(epics.map((e) => [e.id, e.objective_id]))
+  const epicAligned = epicAlignmentMap(epics)
   const active = stories.filter((s) => ACTIVE_STORY_STATUSES.includes(s.status))
-  const aligned = active.filter(
-    (s) =>
-      s.key_result_id != null ||
-      (s.epic_id != null && epicToObjective.get(s.epic_id) != null),
-  ).length
+  const aligned = active.filter((s) => isStoryAligned(s, epicAligned)).length
   return { aligned, total: active.length, ratio: active.length === 0 ? 0 : aligned / active.length }
+}
+
+/**
+ * Leading indicator for a key result: how much of the work meant to move it
+ * is actually done. Counts stories linked straight to the KR plus stories in
+ * epics that point at the KR.
+ */
+export function keyResultWork(
+  keyResultId: string,
+  stories: Pick<Story, 'epic_id' | 'key_result_id' | 'status'>[],
+  epics: Pick<Epic, 'id' | 'key_result_id'>[],
+): { done: number; total: number; ratio: number } {
+  const epicIds = new Set(epics.filter((e) => e.key_result_id === keyResultId).map((e) => e.id))
+  const own = stories.filter(
+    (s) =>
+      s.status !== 'canceled' &&
+      (s.key_result_id === keyResultId || (s.epic_id != null && epicIds.has(s.epic_id))),
+  )
+  const done = own.filter((s) => s.status === 'done').length
+  return { done, total: own.length, ratio: own.length === 0 ? 0 : done / own.length }
 }
 
 export function clamp01(n: number): number {
@@ -88,6 +119,15 @@ export function displayName(p: { full_name: string | null; email: string | null 
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return ''
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+export function timeAgo(iso: string): string {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  if (diff < 60) return 'just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 

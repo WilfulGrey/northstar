@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { PageHeader } from '@/components/Layout'
 import { ProgressBar } from '@/components/ProgressBar'
 import { Avatar } from '@/components/Avatar'
@@ -6,6 +7,7 @@ import { ObjectiveStatusBadge } from '@/components/Badges'
 import { EmptyState, ErrorState, Spinner } from '@/components/States'
 import { ObjectiveModal } from '@/modals/ObjectiveModal'
 import { KeyResultModal } from '@/modals/KeyResultModal'
+import { KeyResultDetail } from '@/components/KeyResultDetail'
 import {
   useDeleteKeyResult,
   useDeleteObjective,
@@ -19,6 +21,15 @@ export function Okrs() {
   const { data: objectives, isLoading, error } = useObjectives()
   const [newOpen, setNewOpen] = useState(false)
   const [edit, setEdit] = useState<ObjectiveFull | null>(null)
+  const [detailKr, setDetailKr] = useState<KeyResult | null>(null)
+  const location = useLocation()
+
+  useEffect(() => {
+    if ((location.state as { quickCreate?: string } | null)?.quickCreate === 'objective') {
+      setNewOpen(true)
+      window.history.replaceState({}, '')
+    }
+  }, [location.state])
 
   const groups = useMemo(() => groupByCycle(objectives ?? []), [objectives])
 
@@ -55,7 +66,7 @@ export function Okrs() {
                 <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">{group.name}</h2>
                 <div className="space-y-4">
                   {group.objectives.map((o) => (
-                    <ObjectiveCard key={o.id} objective={o} onEdit={() => setEdit(o)} />
+                    <ObjectiveCard key={o.id} objective={o} onEdit={() => setEdit(o)} onOpenKr={setDetailKr} />
                   ))}
                 </div>
               </section>
@@ -66,11 +77,20 @@ export function Okrs() {
 
       {newOpen && <ObjectiveModal open onClose={() => setNewOpen(false)} />}
       {edit && <ObjectiveModal open objective={edit} onClose={() => setEdit(null)} />}
+      {detailKr && <KeyResultDetail keyResult={detailKr} onClose={() => setDetailKr(null)} />}
     </>
   )
 }
 
-function ObjectiveCard({ objective, onEdit }: { objective: ObjectiveFull; onEdit: () => void }) {
+function ObjectiveCard({
+  objective,
+  onEdit,
+  onOpenKr,
+}: {
+  objective: ObjectiveFull
+  onEdit: () => void
+  onOpenKr: (kr: KeyResult) => void
+}) {
   const [addKr, setAddKr] = useState(false)
   const [editKr, setEditKr] = useState<KeyResult | null>(null)
   const del = useDeleteObjective()
@@ -112,7 +132,9 @@ function ObjectiveCard({ objective, onEdit }: { objective: ObjectiveFull; onEdit
         {objective.key_results.length === 0 ? (
           <p className="py-3 text-sm text-zinc-400">No key results yet.</p>
         ) : (
-          objective.key_results.map((kr) => <KeyResultRow key={kr.id} kr={kr} onEdit={() => setEditKr(kr)} />)
+          objective.key_results.map((kr) => (
+            <KeyResultRow key={kr.id} kr={kr} onEdit={() => setEditKr(kr)} onOpenDetail={() => onOpenKr(kr)} />
+          ))
         )}
       </div>
 
@@ -126,7 +148,7 @@ function ObjectiveCard({ objective, onEdit }: { objective: ObjectiveFull; onEdit
   )
 }
 
-function KeyResultRow({ kr, onEdit }: { kr: KeyResult; onEdit: () => void }) {
+function KeyResultRow({ kr, onEdit, onOpenDetail }: { kr: KeyResult; onEdit: () => void; onOpenDetail: () => void }) {
   const update = useUpdateKeyResult()
   const del = useDeleteKeyResult()
   const [value, setValue] = useState(String(kr.current_value))
@@ -144,7 +166,13 @@ function KeyResultRow({ kr, onEdit }: { kr: KeyResult; onEdit: () => void }) {
   return (
     <div className="flex items-center gap-4 py-3" data-testid="kr-row" data-kr-title={kr.title}>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-zinc-800">{kr.title}</p>
+        <button
+          className="truncate rounded text-left text-sm font-medium text-zinc-800 hover:text-indigo-600"
+          onClick={onOpenDetail}
+          title="View contributing work"
+        >
+          {kr.title}
+        </button>
         <div className="mt-1.5 flex items-center gap-3">
           <ProgressBar ratio={ratio} className="max-w-[220px]" />
           <span className="text-xs font-medium tabular-nums text-zinc-500">{pct(ratio)}</span>

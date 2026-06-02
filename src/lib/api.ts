@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { useEffect } from 'react'
 import { supabase } from './supabase'
 import type {
+  Activity,
+  Comment,
   Cycle,
   Epic,
   EpicFull,
@@ -18,6 +20,8 @@ export const keys = {
   objectives: ['objectives'] as const,
   epics: ['epics'] as const,
   stories: ['stories'] as const,
+  comments: (storyId: string) => ['comments', storyId] as const,
+  activity: (storyId: string) => ['activity', storyId] as const,
 }
 
 function throwOnError<T>({ data, error }: { data: T | null; error: { message: string } | null }): T {
@@ -66,7 +70,7 @@ export function useEpics() {
       throwOnError<EpicFull[]>(
         await supabase
           .from('epics')
-          .select('*, objective:objectives(id,title,status), owner:profiles(*)')
+          .select('*, objective:objectives(id,title,status), key_result:key_results(id,title,objective_id), owner:profiles(*)')
           .order('created_at', { ascending: true }),
       ),
   })
@@ -83,6 +87,34 @@ export function useStories() {
             '*, epic:epics(id,title,color,objective_id), assignee:profiles(*), key_result:key_results(id,title)',
           )
           .order('position', { ascending: true }),
+      ),
+  })
+}
+
+export function useComments(storyId: string) {
+  return useQuery({
+    queryKey: keys.comments(storyId),
+    queryFn: async () =>
+      throwOnError<Comment[]>(
+        await supabase
+          .from('comments')
+          .select('*, author:profiles(*)')
+          .eq('story_id', storyId)
+          .order('created_at', { ascending: true }),
+      ),
+  })
+}
+
+export function useActivity(storyId: string) {
+  return useQuery({
+    queryKey: keys.activity(storyId),
+    queryFn: async () =>
+      throwOnError<Activity[]>(
+        await supabase
+          .from('activity')
+          .select('*, actor:profiles(*)')
+          .eq('story_id', storyId)
+          .order('created_at', { ascending: true }),
       ),
   })
 }
@@ -184,6 +216,23 @@ export function useDeleteStory() {
   )
 }
 
+// Comments
+export function useAddComment(storyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: { body: string; author_id: string }) =>
+      throwOnError(await supabase.from('comments').insert({ story_id: storyId, ...input }).select().single()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.comments(storyId) }),
+  })
+}
+export function useDeleteComment(storyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => throwOnError(await supabase.from('comments').delete().eq('id', id)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.comments(storyId) }),
+  })
+}
+
 /**
  * Drop embedded relations and undefined values before writing — the select
  * helpers return nested objects (owner, epic, ...) that aren't real columns.
@@ -216,6 +265,8 @@ export function useRealtimeSync() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'objectives' }, () => invalidate(qc, keys.objectives))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'key_results' }, () => invalidate(qc, keys.objectives))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => invalidate(qc, ['comments']))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity' }, () => invalidate(qc, ['activity']))
       .subscribe()
     return () => {
       supabase.removeChannel(channel)

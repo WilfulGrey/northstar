@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { PageHeader } from '@/components/Layout'
 import { ProgressBar } from '@/components/ProgressBar'
 import { Avatar } from '@/components/Avatar'
@@ -15,6 +16,14 @@ export function Epics() {
   const [newOpen, setNewOpen] = useState(false)
   const [edit, setEdit] = useState<Epic | null>(null)
   const del = useDeleteEpic()
+  const location = useLocation()
+
+  useEffect(() => {
+    if ((location.state as { quickCreate?: string } | null)?.quickCreate === 'epic') {
+      setNewOpen(true)
+      window.history.replaceState({}, '')
+    }
+  }, [location.state])
 
   return (
     <>
@@ -104,9 +113,14 @@ function ObjectiveLink({ epic }: { epic: EpicFull }) {
     )
   }
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-zinc-500">
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-zinc-500" title={epic.key_result ? `${epic.objective.title} · ${epic.key_result.title}` : epic.objective.title}>
       <span className="text-zinc-400">→</span>
       <span className="truncate">{epic.objective.title}</span>
+      {epic.key_result && (
+        <span className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600">
+          KR
+        </span>
+      )}
     </span>
   )
 }

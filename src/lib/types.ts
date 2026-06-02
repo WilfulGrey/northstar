@@ -52,10 +52,33 @@ export interface Epic {
   description: string | null
   status: EpicStatus
   objective_id: string | null
+  key_result_id: string | null
   owner_id: string | null
   color: string
   created_at: string
   updated_at: string
+}
+
+export type ActivityType = 'created' | 'status_changed' | 'assignee_changed' | 'priority_changed' | 'epic_changed'
+
+export interface Comment {
+  id: string
+  story_id: string
+  author_id: string | null
+  body: string
+  created_at: string
+  author?: Profile | null
+}
+
+export interface Activity {
+  id: string
+  story_id: string
+  actor_id: string | null
+  type: ActivityType
+  from_value: string | null
+  to_value: string | null
+  created_at: string
+  actor?: Profile | null
 }
 
 export interface Story {
@@ -85,6 +108,7 @@ export interface ObjectiveFull extends Objective {
 
 export interface EpicFull extends Epic {
   objective: Pick<Objective, 'id' | 'title' | 'status'> | null
+  key_result: Pick<KeyResult, 'id' | 'title' | 'objective_id'> | null
   owner: Profile | null
 }
 

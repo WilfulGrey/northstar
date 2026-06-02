@@ -42,6 +42,10 @@ body {
   .card {
     @apply rounded-xl border border-zinc-200 bg-white;
   }
+  /* Compact inline control used in the story-detail property grid. */
+  .prop-select {
+    @apply w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-zinc-800 hover:border-zinc-200 focus:border-indigo-400 focus:bg-white focus:outline-none;
+  }
 }
 
 /* Thin, unobtrusive scrollbars for the board columns. */

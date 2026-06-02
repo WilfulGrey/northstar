@@ -17,17 +17,26 @@ export function EpicModal({ open, onClose, epic }: { open: boolean; onClose: () 
   const [description, setDescription] = useState(epic?.description ?? '')
   const [status, setStatus] = useState<EpicStatus>(epic?.status ?? 'backlog')
   const [objectiveId, setObjectiveId] = useState(epic?.objective_id ?? '')
+  const [keyResultId, setKeyResultId] = useState(epic?.key_result_id ?? '')
   const [ownerId, setOwnerId] = useState(epic?.owner_id ?? '')
   const [color, setColor] = useState(epic?.color ?? COLORS[0])
   const busy = create.isPending || update.isPending
 
+  function objectiveForKr(krId: string): string {
+    for (const o of objectives) if (o.key_results.some((k) => k.id === krId)) return o.id
+    return ''
+  }
+
   async function submit() {
     if (!title.trim()) return
+    // A key result implies its objective — keep them consistent.
+    const resolvedObjective = keyResultId ? objectiveForKr(keyResultId) || objectiveId : objectiveId
     const payload = {
       title: title.trim(),
       description: description.trim() || null,
       status,
-      objective_id: objectiveId || null,
+      objective_id: resolvedObjective || null,
+      key_result_id: keyResultId || null,
       owner_id: ownerId || null,
       color,
     }
@@ -103,12 +112,44 @@ export function EpicModal({ open, onClose, epic }: { open: boolean; onClose: () 
         </div>
         <div>
           <label className="label">Linked objective — connects this work to a goal</label>
-          <select className="input" aria-label="Linked objective" value={objectiveId} onChange={(e) => setObjectiveId(e.target.value)}>
+          <select
+            className="input"
+            aria-label="Linked objective"
+            value={objectiveId}
+            onChange={(e) => {
+              setObjectiveId(e.target.value)
+              // Clear a key result that no longer belongs to the chosen objective.
+              if (keyResultId && objectiveForKr(keyResultId) !== e.target.value) setKeyResultId('')
+            }}
+          >
             <option value="">No objective (unaligned)</option>
             {objectives.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.title}
               </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Key result (optional) — which metric this moves</label>
+          <select
+            className="input"
+            aria-label="Linked key result"
+            value={keyResultId}
+            onChange={(e) => {
+              setKeyResultId(e.target.value)
+              if (e.target.value) setObjectiveId(objectiveForKr(e.target.value))
+            }}
+          >
+            <option value="">No key result</option>
+            {objectives.map((o) => (
+              <optgroup key={o.id} label={o.title}>
+                {o.key_results.map((kr) => (
+                  <option key={kr.id} value={kr.id}>
+                    {kr.title}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>

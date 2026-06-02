@@ -5,18 +5,18 @@ import { ProgressBar } from '@/components/ProgressBar'
 import { Avatar } from '@/components/Avatar'
 import { ObjectiveStatusBadge, PriorityIcon } from '@/components/Badges'
 import { ErrorState, Spinner } from '@/components/States'
-import { StoryModal } from '@/modals/StoryModal'
+import { StoryDetail } from '@/components/StoryDetail'
 import { useAuth } from '@/auth/AuthProvider'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
-import { alignment, displayName, objectiveProgress, pct } from '@/lib/format'
-import { ACTIVE_STORY_STATUSES, type StoryFull } from '@/lib/types'
+import { alignment, displayName, epicAlignmentMap, isStoryAligned, objectiveProgress, pct } from '@/lib/format'
+import { ACTIVE_STORY_STATUSES } from '@/lib/types'
 
 export function Dashboard() {
   const { profile } = useAuth()
   const objectivesQ = useObjectives()
   const epicsQ = useEpics()
   const storiesQ = useStories()
-  const [openStory, setOpenStory] = useState<StoryFull | null>(null)
+  const [openStoryId, setOpenStoryId] = useState<string | null>(null)
 
   const objectives = objectivesQ.data ?? []
   const epics = epicsQ.data ?? []
@@ -30,16 +30,13 @@ export function Dashboard() {
     () => (objectives.length ? objectives.reduce((a, o) => a + objectiveProgress(o), 0) / objectives.length : 0),
     [objectives],
   )
-  const epicToObjective = useMemo(() => new Map(epics.map((e) => [e.id, e.objective_id])), [epics])
+  const epicAligned = useMemo(() => epicAlignmentMap(epics), [epics])
   const unaligned = useMemo(
     () =>
       stories.filter(
-        (s) =>
-          ACTIVE_STORY_STATUSES.includes(s.status) &&
-          s.key_result_id == null &&
-          (s.epic_id == null || epicToObjective.get(s.epic_id) == null),
+        (s) => ACTIVE_STORY_STATUSES.includes(s.status) && !isStoryAligned(s, epicAligned),
       ),
-    [stories, epicToObjective],
+    [stories, epicAligned],
   )
   const activeCount = stories.filter((s) => ACTIVE_STORY_STATUSES.includes(s.status)).length
 
@@ -123,7 +120,7 @@ export function Dashboard() {
                         {unaligned.slice(0, 6).map((s) => (
                           <li key={s.id}>
                             <button
-                              onClick={() => setOpenStory(s)}
+                              onClick={() => setOpenStoryId(s.id)}
                               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-zinc-600 hover:bg-zinc-50"
                             >
                               <PriorityIcon priority={s.priority} />
@@ -145,7 +142,7 @@ export function Dashboard() {
         )}
       </div>
 
-      {openStory && <StoryModal open story={openStory} onClose={() => setOpenStory(null)} />}
+      {openStoryId && <StoryDetail storyId={openStoryId} onClose={() => setOpenStoryId(null)} />}
     </>
   )
 }

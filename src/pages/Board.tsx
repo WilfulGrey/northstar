@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { PageHeader } from '@/components/Layout'
 import { Avatar } from '@/components/Avatar'
 import { PriorityIcon } from '@/components/Badges'
 import { ErrorState, Spinner } from '@/components/States'
 import { StoryModal } from '@/modals/StoryModal'
+import { StoryDetail } from '@/components/StoryDetail'
 import { useEpics, useStories, useUpdateStory } from '@/lib/api'
 import { BOARD_COLUMNS, STORY_STATUS, type StoryFull, type StoryStatus } from '@/lib/types'
 
@@ -14,8 +16,17 @@ export function Board() {
 
   const [epicFilter, setEpicFilter] = useState('')
   const [creating, setCreating] = useState<StoryStatus | null>(null)
-  const [editing, setEditing] = useState<StoryFull | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
+  const location = useLocation()
+
+  // Quick-create from the command palette.
+  useEffect(() => {
+    if ((location.state as { quickCreate?: string } | null)?.quickCreate === 'story') {
+      setCreating('backlog')
+      window.history.replaceState({}, '')
+    }
+  }, [location.state])
 
   const filtered = useMemo(
     () => (stories ?? []).filter((s) => (epicFilter ? s.epic_id === epicFilter : true)),
@@ -96,7 +107,7 @@ export function Board() {
                     <StoryCard
                       key={story.id}
                       story={story}
-                      onOpen={() => setEditing(story)}
+                      onOpen={() => setOpenId(story.id)}
                       onDragStart={() => setDragId(story.id)}
                       onDragEnd={() => setDragId(null)}
                     />
@@ -109,7 +120,7 @@ export function Board() {
       </div>
 
       {creating && <StoryModal open defaultStatus={creating} defaultEpicId={epicFilter} onClose={() => setCreating(null)} />}
-      {editing && <StoryModal open story={editing} onClose={() => setEditing(null)} />}
+      {openId && <StoryDetail storyId={openId} onClose={() => setOpenId(null)} />}
     </>
   )
 }
