@@ -1,0 +1,27 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# secrets / env
+.env
+.env.*
+!.env.example
+.db_password.secret
+.supabase_create.json
+.northstar_keys.json
+
+# supabase cli
+supabase/.temp
+supabase/.branches
+
+# playwright
+test-results
+playwright-report
+playwright/.cache
+
+# logs / os
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
