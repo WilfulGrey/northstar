@@ -2,6 +2,9 @@
 
 **OKRs meet execution for small product teams.**
 
+🔗 **Live:** https://northstar-3s95.onrender.com — sign in with the demo button (`demo@northstar.app` / `northstar2026`)
+📦 **Repo:** https://github.com/WilfulGrey/northstar
+
 Most tools make you choose: Linear is brilliant for *execution* (epics, stories, a fast
 board) but has no concept of *why*; spreadsheets and OKR tools track the *why* but live
 miles away from the day-to-day work. For a small product team that gap is where focus
