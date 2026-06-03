@@ -56,6 +56,18 @@ on the right things?*
 3. **My Work.** A personal home: stories assigned to me grouped by status — with the same
    alignment flag, so I can see whether *my* week maps to a goal — plus the objectives I own.
 
+## What's new in v1.3 — "see the trend, share the link, grow the team"
+
+1. **Invite teammates — via a Supabase Edge Function.** Creating an account needs the
+   `service_role` key, which must never reach the browser. So a Deno **Edge Function**
+   (`supabase/functions/invite-member`, `verify_jwt` on) does it: only a signed-in member
+   can call it, and it provisions the account server-side. This is the first piece of
+   privileged server logic — the right tool once RLS isn't enough. New **Team** page.
+2. **KR trend sparklines.** The check-in history is drawn as an inline sparkline on the OKR
+   list and the key-result detail — the trend at a glance, no click required.
+3. **Shareable story deep links.** `…/board?story=NS-42` opens a story directly; the drawer
+   has a **Copy link** button and ⌘K story results land straight on the card.
+
 ## Product decisions (and what I deliberately left out)
 
 - **One shared workspace, not multi-tenant.** A small team is the unit. RLS gives every
@@ -65,9 +77,9 @@ on the right things?*
 - **Progress is computed, never stored.** Objective progress = mean of its key results;
   key-result progress handles "12 bugs → 0" the same as "0% → 60%"; epic progress = done
   stories / total. One source of truth.
-- **Cut for now:** sprints/velocity, custom fields, saved filters, labels, attachments,
-  in-app team invitations. All are natural next steps. (Comments, activity and ⌘K shipped
-  in v1.1 — see above.)
+- **Cut for now:** sprints/velocity, custom fields, saved filters, labels, attachments.
+  All are natural next steps. (Comments/activity/⌘K shipped in v1.1; check-ins, rollups and
+  My Work in v1.2; team invites, sparklines and deep links in v1.3 — see above.)
 
 ## Architecture
 
@@ -77,6 +89,7 @@ on the right things?*
 | Data/Auth | **Supabase** (Postgres + Auth + RLS + Realtime) | Browser talks to the DB directly; RLS is the security boundary |
 | Hosting   | **Render Static Site** | On the free tier a static site has **no cold starts** — a Node server spins down after 15 min and demos badly |
 | State     | **TanStack Query** | Caching, loading/error states, and Realtime-driven invalidation |
+| Server    | **Supabase Edge Function** (Deno) for privileged ops (team invites) | Keeps the service-role key off the client |
 | Tests     | **Playwright** e2e against the live database | Proves the real path, not mocks |
 
 Because the app is a static bundle hitting Supabase directly, **Row Level Security is the
@@ -137,8 +150,9 @@ src/
   components/   Layout, Modal, Avatar, ProgressBar, badges, states
   lib/          supabase client, types, progress/alignment math, React Query hooks
   modals/       create/edit forms for objectives, key results, epics, stories
-  pages/        Login, Dashboard (alignment), My Work, OKRs, Epics, Board
-supabase/migrations/   Postgres schema + RLS
-scripts/seed.mjs       idempotent demo seed
-e2e/                   Playwright specs
+  pages/        Login, Dashboard (alignment), My Work, OKRs, Epics, Board, Team
+supabase/migrations/             Postgres schema + RLS
+supabase/functions/invite-member Edge Function (Deno) — privileged team invites
+scripts/seed.mjs                 idempotent demo seed
+e2e/                             Playwright specs (15)
 ```

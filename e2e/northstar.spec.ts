@@ -131,8 +131,9 @@ test('command palette searches and navigates', async ({ page }) => {
   // Clicking the result auto-waits for the stories query to populate it.
   await page.getByRole('button', { name: /Add Sentry error tracking/ }).click()
 
-  await expect(page).toHaveURL(/\/board$/)
-  await expect(page.getByTestId('column-backlog')).toBeVisible()
+  // Story results deep-link straight to the card.
+  await expect(page).toHaveURL(/\/board\?story=/)
+  await expect(page.getByLabel('Story title')).toHaveValue('Add Sentry error tracking')
 })
 
 // ---------------- v1.2 ----------------
@@ -169,6 +170,41 @@ test('My Work lists the stories assigned to me', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'My Work' })).toBeVisible()
   await expect(page.getByText('Postmortem template & on-call rota')).toBeVisible()
   await expect(page.getByText('Clean up unused feature flags')).toBeVisible()
+})
+
+// ---------------- v1.3 ----------------
+
+test('invites a teammate through the edge function', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Team', exact: true }).click()
+
+  const email = `e2e-invite-${Date.now().toString().slice(-7)}@northstar.app`
+  await page.getByLabel('Invite email').fill(email)
+  await page.getByLabel('Invite name').fill('E2E Teammate')
+  await page.getByRole('button', { name: 'Invite', exact: true }).click()
+
+  await expect(page.getByTestId('invite-result')).toBeVisible()
+  await expect(page.getByTestId('member-list').getByText(email)).toBeVisible()
+})
+
+test('a story opens from a shareable deep link', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+
+  // Discover the NS ref by opening the card, then reload via its deep link.
+  await page.locator('[data-story-title="Add Sentry error tracking"]').click()
+  const ref = (await page.getByRole('dialog').getByText(/^NS-\d+$/).first().innerText()).trim()
+  await page.keyboard.press('Escape')
+
+  await page.goto(`/board?story=${ref}`)
+  await expect(page.getByLabel('Story title')).toHaveValue('Add Sentry error tracking')
+})
+
+test('OKR list shows a check-in trend sparkline', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'OKRs', exact: true }).click()
+  // Seeded KRs (e.g. Activation rate) have multiple check-ins → a sparkline renders.
+  await expect(page.getByTestId('kr-sparkline').first()).toBeVisible()
 })
 
 test('lists unaligned in-flight work on the dashboard', async ({ page }) => {

@@ -36,6 +36,7 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
   const update = useUpdateStory()
   const del = useDeleteStory()
   const qc = useQueryClient()
+  const [copied, setCopied] = useState(false)
 
   const story = stories?.find((s) => s.id === storyId) ?? null
 
@@ -64,6 +65,16 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
           <header className="flex items-center justify-between border-b border-zinc-100 px-5 py-3">
             <span className="font-mono text-xs text-zinc-400">NS-{story.ref}</span>
             <div className="flex items-center gap-1">
+              <button
+                className="btn btn-ghost px-2 text-xs"
+                onClick={() => {
+                  navigator.clipboard?.writeText(`${window.location.origin}/board?story=NS-${story.ref}`)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 1500)
+                }}
+              >
+                {copied ? 'Copied!' : 'Copy link'}
+              </button>
               <button
                 className="btn btn-danger px-2 text-xs"
                 onClick={() => {

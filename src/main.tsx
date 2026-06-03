@@ -12,6 +12,7 @@ import { MyWork } from './pages/MyWork'
 import { Okrs } from './pages/Okrs'
 import { Epics } from './pages/Epics'
 import { Board } from './pages/Board'
+import { Team } from './pages/Team'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ function App() {
         <Route path="okrs" element={<Okrs />} />
         <Route path="epics" element={<Epics />} />
         <Route path="board" element={<Board />} />
+        <Route path="team" element={<Team />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

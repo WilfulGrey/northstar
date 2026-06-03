@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Drawer } from './Drawer'
 import { ProgressBar } from './ProgressBar'
+import { Sparkline } from './Sparkline'
 import { StoryStatusDot } from './Badges'
 import { Avatar } from './Avatar'
 import { useAuth } from '@/auth/AuthProvider'
@@ -92,6 +93,7 @@ function CheckinSection({ kr }: { kr: KeyResult }) {
   const [value, setValue] = useState(String(kr.current_value))
   const [confidence, setConfidence] = useState<CheckinConfidence>('on_track')
   const [note, setNote] = useState('')
+  const trend = useMemo(() => [...checkins].reverse().map((c) => c.value), [checkins])
 
   async function submit() {
     if (!user || value === '') return
@@ -101,7 +103,10 @@ function CheckinSection({ kr }: { kr: KeyResult }) {
 
   return (
     <div className="mt-5">
-      <p className="label">Check in</p>
+      <div className="mb-1 flex items-center justify-between">
+        <p className="label mb-0">Check in</p>
+        {trend.length >= 2 && <Sparkline values={trend} width={96} height={24} />}
+      </div>
       <div className="card space-y-3 p-3">
         <div className="grid grid-cols-2 gap-3">
           <div>

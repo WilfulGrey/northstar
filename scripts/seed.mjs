@@ -70,6 +70,18 @@ async function main() {
   }
   console.log(`  ${TEAM.length} users ready.`)
 
+  // Remove throwaway accounts created by the invite e2e test.
+  const { data: all } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  const teamEmails = new Set(TEAM.map((m) => m.email))
+  let removed = 0
+  for (const u of all.users) {
+    if (u.email && u.email.startsWith('e2e-invite-') && !teamEmails.has(u.email)) {
+      await db.auth.admin.deleteUser(u.id)
+      removed++
+    }
+  }
+  if (removed) console.log(`  removed ${removed} throwaway invite account(s).`)
+
   console.log('→ wiping existing planning data…')
   await wipe()
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { PageHeader } from '@/components/Layout'
 import { ProgressBar } from '@/components/ProgressBar'
+import { Sparkline } from '@/components/Sparkline'
 import { Avatar } from '@/components/Avatar'
 import { ObjectiveStatusBadge } from '@/components/Badges'
 import { EmptyState, ErrorState, Spinner } from '@/components/States'
@@ -10,6 +11,7 @@ import { KeyResultModal } from '@/modals/KeyResultModal'
 import { KeyResultDetail } from '@/components/KeyResultDetail'
 import { ObjectiveDetail } from '@/components/ObjectiveDetail'
 import {
+  useAllCheckins,
   useDeleteKeyResult,
   useDeleteObjective,
   useObjectives,
@@ -20,6 +22,7 @@ import type { KeyResult, ObjectiveFull } from '@/lib/types'
 
 export function Okrs() {
   const { data: objectives, isLoading, error } = useObjectives()
+  const { data: allCheckins = [] } = useAllCheckins()
   const [newOpen, setNewOpen] = useState(false)
   const [edit, setEdit] = useState<ObjectiveFull | null>(null)
   const [detailKr, setDetailKr] = useState<KeyResult | null>(null)
@@ -40,6 +43,14 @@ export function Okrs() {
   }, [location.state, objectives])
 
   const groups = useMemo(() => groupByCycle(objectives ?? []), [objectives])
+  const checkinsByKr = useMemo(() => {
+    const m = new Map<string, number[]>()
+    for (const c of allCheckins) {
+      if (!m.has(c.key_result_id)) m.set(c.key_result_id, [])
+      m.get(c.key_result_id)!.push(c.value)
+    }
+    return m
+  }, [allCheckins])
 
   return (
     <>
@@ -80,6 +91,7 @@ export function Okrs() {
                       onEdit={() => setEdit(o)}
                       onOpenKr={setDetailKr}
                       onOpenDetail={() => setDetailObj(o)}
+                      checkinsByKr={checkinsByKr}
                     />
                   ))}
                 </div>
@@ -102,11 +114,13 @@ function ObjectiveCard({
   onEdit,
   onOpenKr,
   onOpenDetail,
+  checkinsByKr,
 }: {
   objective: ObjectiveFull
   onEdit: () => void
   onOpenKr: (kr: KeyResult) => void
   onOpenDetail: () => void
+  checkinsByKr: Map<string, number[]>
 }) {
   const [addKr, setAddKr] = useState(false)
   const [editKr, setEditKr] = useState<KeyResult | null>(null)
@@ -152,7 +166,13 @@ function ObjectiveCard({
           <p className="py-3 text-sm text-zinc-400">No key results yet.</p>
         ) : (
           objective.key_results.map((kr) => (
-            <KeyResultRow key={kr.id} kr={kr} onEdit={() => setEditKr(kr)} onOpenDetail={() => onOpenKr(kr)} />
+            <KeyResultRow
+              key={kr.id}
+              kr={kr}
+              history={checkinsByKr.get(kr.id) ?? []}
+              onEdit={() => setEditKr(kr)}
+              onOpenDetail={() => onOpenKr(kr)}
+            />
           ))
         )}
       </div>
@@ -167,7 +187,17 @@ function ObjectiveCard({
   )
 }
 
-function KeyResultRow({ kr, onEdit, onOpenDetail }: { kr: KeyResult; onEdit: () => void; onOpenDetail: () => void }) {
+function KeyResultRow({
+  kr,
+  history,
+  onEdit,
+  onOpenDetail,
+}: {
+  kr: KeyResult
+  history: number[]
+  onEdit: () => void
+  onOpenDetail: () => void
+}) {
   const update = useUpdateKeyResult()
   const del = useDeleteKeyResult()
   const [value, setValue] = useState(String(kr.current_value))
@@ -198,6 +228,11 @@ function KeyResultRow({ kr, onEdit, onOpenDetail }: { kr: KeyResult; onEdit: () 
           <span className="hidden text-xs text-zinc-400 sm:inline">· updated {timeAgo(kr.updated_at)}</span>
         </div>
       </div>
+      {history.length >= 2 && (
+        <span className="hidden md:block" data-testid="kr-sparkline" title="Check-in trend">
+          <Sparkline values={history} />
+        </span>
+      )}
       <div className="flex shrink-0 items-center gap-1.5 text-sm text-zinc-500">
         <input
           aria-label={`Current value for ${kr.title}`}

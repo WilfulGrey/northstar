@@ -122,6 +122,17 @@ export function useActivity(storyId: string) {
   })
 }
 
+// All check-ins (the table is small) — used to draw trend sparklines on the OKR list.
+export function useAllCheckins() {
+  return useQuery({
+    queryKey: ['checkins', '_all'],
+    queryFn: async () =>
+      throwOnError<KrCheckin[]>(
+        await supabase.from('kr_checkins').select('*').order('created_at', { ascending: true }),
+      ),
+  })
+}
+
 export function useKrCheckins(keyResultId: string) {
   return useQuery({
     queryKey: keys.checkins(keyResultId),
@@ -231,6 +242,34 @@ export function useDeleteStory() {
     async (id: string) => throwOnError(await supabase.from('stories').delete().eq('id', id)),
     [keys.stories],
   )
+}
+
+// Team — invite a member through the Edge Function (service-role stays server-side).
+export interface InviteResult {
+  ok: boolean
+  created: boolean
+  member: { id: string; email: string; full_name: string }
+  temp_password: string | null
+}
+export function useInviteMember() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: { email: string; full_name?: string }): Promise<InviteResult> => {
+      const { data, error } = await supabase.functions.invoke('invite-member', { body: input })
+      if (error) {
+        let message = error.message
+        try {
+          const body = await (error as { context?: Response }).context?.json()
+          if (body?.error) message = body.error
+        } catch {
+          // keep the default message
+        }
+        throw new Error(message)
+      }
+      return data as InviteResult
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.profiles }),
+  })
 }
 
 // KR check-ins — records history AND advances the key result's current value.

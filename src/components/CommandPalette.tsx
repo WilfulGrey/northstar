@@ -74,7 +74,7 @@ export function CommandPalette() {
         found.push({ id: `e-${e.id}`, label: e.title, hint: 'Epic', run: () => go('/epics') }),
       )
       stories.filter((s) => match(s.title)).slice(0, 6).forEach((s) =>
-        found.push({ id: `s-${s.id}`, label: s.title, hint: `Story · NS-${s.ref}`, run: () => go('/board') }),
+        found.push({ id: `s-${s.id}`, label: s.title, hint: `Story · NS-${s.ref}`, run: () => go(`/board?story=NS-${s.ref}`) }),
       )
     }
     return [...actions.filter((a) => match(a.label)), ...found]

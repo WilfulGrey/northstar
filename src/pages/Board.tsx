@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/Layout'
 import { Avatar } from '@/components/Avatar'
 import { PriorityIcon } from '@/components/Badges'
@@ -19,6 +19,7 @@ export function Board() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Quick-create from the command palette.
   useEffect(() => {
@@ -27,6 +28,29 @@ export function Board() {
       window.history.replaceState({}, '')
     }
   }, [location.state])
+
+  // Deep link: /board?story=NS-12 (or a story id) opens the detail drawer.
+  useEffect(() => {
+    const param = searchParams.get('story')
+    if (!param || !stories) return
+    const story = param.toUpperCase().startsWith('NS-')
+      ? stories.find((s) => s.ref === Number(param.slice(3)))
+      : stories.find((s) => s.id === param)
+    if (story) setOpenId(story.id)
+  }, [searchParams, stories])
+
+  function closeDrawer() {
+    setOpenId(null)
+    if (searchParams.has('story')) {
+      setSearchParams(
+        (prev) => {
+          prev.delete('story')
+          return prev
+        },
+        { replace: true },
+      )
+    }
+  }
 
   const filtered = useMemo(
     () => (stories ?? []).filter((s) => (epicFilter ? s.epic_id === epicFilter : true)),
@@ -120,7 +144,7 @@ export function Board() {
       </div>
 
       {creating && <StoryModal open defaultStatus={creating} defaultEpicId={epicFilter} onClose={() => setCreating(null)} />}
-      {openId && <StoryDetail storyId={openId} onClose={() => setOpenId(null)} />}
+      {openId && <StoryDetail storyId={openId} onClose={closeDrawer} />}
     </>
   )
 }

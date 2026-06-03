@@ -12,6 +12,7 @@ const NAV = [
   { to: '/okrs', label: 'OKRs', icon: TargetIcon },
   { to: '/epics', label: 'Epics', icon: LayersIcon },
   { to: '/board', label: 'Board', icon: BoardIcon },
+  { to: '/team', label: 'Team', icon: TeamIcon },
 ]
 
 export function Layout() {
@@ -118,4 +119,7 @@ function SearchIcon() {
 }
 function UserIcon() {
   return base(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>)
+}
+function TeamIcon() {
+  return base(<><circle cx="9" cy="8" r="3.2" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 5.5a3 3 0 0 1 0 5.8" /><path d="M17.5 20a6 6 0 0 0-3-5.2" /></>)
 }
