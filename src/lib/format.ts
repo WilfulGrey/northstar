@@ -1,5 +1,35 @@
-import type { Epic, KeyResult, KrMetric, Objective, ObjectiveFull, Story } from './types'
-import { ACTIVE_STORY_STATUSES } from './types'
+import type { Epic, KeyResult, KrMetric, ObjectiveFull, StatusCategory, Story } from './types'
+
+// --- Status semantics ---
+// A story's category comes from its embedded task_status; for anything without
+// an embed (or for epic/objective statuses) we infer it from the label.
+type StatusBearing = { status: string | null; status_info?: { category: string } | null }
+const ACTIVE_CATEGORIES = ['todo', 'in_progress', 'in_review']
+
+export function inferStatusCategory(name: string | null | undefined): StatusCategory {
+  const n = (name ?? '').trim().toLowerCase()
+  if (!n) return 'backlog'
+  if (/(done|live|complete|shipped|merged|achieved)/.test(n)) return 'done'
+  if (/(reject|cancel|dropped|missed)/.test(n)) return 'canceled'
+  if (/(review|test|verif|qa|beta)/.test(n)) return 'in_review'
+  if (/(progress|doing|rollback|started)/.test(n)) return 'in_progress'
+  if (/(todo|to ?do|sprint|ready|next|planned)/.test(n)) return 'todo'
+  return 'backlog'
+}
+
+export function categoryOf(s: StatusBearing): StatusCategory {
+  return (s.status_info?.category as StatusCategory) ?? inferStatusCategory(s.status)
+}
+export const isActiveStory = (s: StatusBearing) => ACTIVE_CATEGORIES.includes(categoryOf(s))
+export const isDoneStory = (s: StatusBearing) => categoryOf(s) === 'done'
+export const isCanceledStory = (s: StatusBearing) => categoryOf(s) === 'canceled'
+
+/** Human label for a status value: 'in_progress' → 'In progress', raw otherwise. */
+export function humanizeStatus(name: string | null | undefined): string {
+  if (!name) return 'No status'
+  const s = name.replace(/_/g, ' ')
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
 
 /**
  * Progress of a single key result, 0..1.
@@ -23,13 +53,12 @@ export function objectiveProgress(o: Pick<ObjectiveFull, 'key_results'>): number
 }
 
 /** Epic progress = fraction of its (non-canceled) stories that are done. */
-export function epicProgress(epicId: string, stories: Pick<Story, 'epic_id' | 'status'>[]): {
-  done: number
-  total: number
-  ratio: number
-} {
-  const own = stories.filter((s) => s.epic_id === epicId && s.status !== 'canceled')
-  const done = own.filter((s) => s.status === 'done').length
+export function epicProgress(
+  epicId: string,
+  stories: (Pick<Story, 'epic_id'> & StatusBearing)[],
+): { done: number; total: number; ratio: number } {
+  const own = stories.filter((s) => s.epic_id === epicId && !isCanceledStory(s))
+  const done = own.filter(isDoneStory).length
   const total = own.length
   return { done, total, ratio: total === 0 ? 0 : done / total }
 }
@@ -54,11 +83,11 @@ export function epicAlignmentMap(epics: Pick<Epic, 'id' | 'objective_id' | 'key_
  * to an objective (via its epic or a key result). Northstar's headline metric.
  */
 export function alignment(
-  stories: Pick<Story, 'status' | 'epic_id' | 'key_result_id'>[],
+  stories: (Pick<Story, 'epic_id' | 'key_result_id'> & StatusBearing)[],
   epics: Pick<Epic, 'id' | 'objective_id' | 'key_result_id'>[],
 ): { aligned: number; total: number; ratio: number } {
   const epicAligned = epicAlignmentMap(epics)
-  const active = stories.filter((s) => ACTIVE_STORY_STATUSES.includes(s.status))
+  const active = stories.filter(isActiveStory)
   const aligned = active.filter((s) => isStoryAligned(s, epicAligned)).length
   return { aligned, total: active.length, ratio: active.length === 0 ? 0 : aligned / active.length }
 }
@@ -70,16 +99,16 @@ export function alignment(
  */
 export function keyResultWork(
   keyResultId: string,
-  stories: Pick<Story, 'epic_id' | 'key_result_id' | 'status'>[],
+  stories: (Pick<Story, 'epic_id' | 'key_result_id'> & StatusBearing)[],
   epics: Pick<Epic, 'id' | 'key_result_id'>[],
 ): { done: number; total: number; ratio: number } {
   const epicIds = new Set(epics.filter((e) => e.key_result_id === keyResultId).map((e) => e.id))
   const own = stories.filter(
     (s) =>
-      s.status !== 'canceled' &&
+      !isCanceledStory(s) &&
       (s.key_result_id === keyResultId || (s.epic_id != null && epicIds.has(s.epic_id))),
   )
-  const done = own.filter((s) => s.status === 'done').length
+  const done = own.filter(isDoneStory).length
   return { done, total: own.length, ratio: own.length === 0 ? 0 : done / own.length }
 }
 
@@ -129,8 +158,4 @@ export function timeAgo(iso: string): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
   if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
-export function objectiveHealthLabel(o: Pick<Objective, 'status'>): string {
-  return o.status
 }

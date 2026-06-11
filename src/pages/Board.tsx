@@ -6,30 +6,34 @@ import { PriorityIcon } from '@/components/Badges'
 import { ErrorState, Spinner } from '@/components/States'
 import { StoryModal } from '@/modals/StoryModal'
 import { StoryDetail } from '@/components/StoryDetail'
-import { useEpics, useStories, useUpdateStory } from '@/lib/api'
-import { BOARD_COLUMNS, STORY_STATUS, type StoryFull, type StoryStatus } from '@/lib/types'
+import { useEpics, useStories, useTaskStatuses, useUpdateStory } from '@/lib/api'
+import { humanizeStatus } from '@/lib/format'
+import type { StoryFull } from '@/lib/types'
+
+const NONE = '__none'
+const CAP = 50 // keep the board responsive even after syncing 1000+ tasks
+const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'none'
 
 export function Board() {
   const { data: stories, isLoading, error } = useStories()
   const { data: epics = [] } = useEpics()
+  const { data: statuses = [] } = useTaskStatuses()
   const update = useUpdateStory()
 
   const [epicFilter, setEpicFilter] = useState('')
-  const [creating, setCreating] = useState<StoryStatus | null>(null)
+  const [creating, setCreating] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Quick-create from the command palette.
   useEffect(() => {
     if ((location.state as { quickCreate?: string } | null)?.quickCreate === 'story') {
-      setCreating('backlog')
+      setCreating(statuses[0]?.name ?? 'backlog')
       window.history.replaceState({}, '')
     }
-  }, [location.state])
+  }, [location.state, statuses])
 
-  // Deep link: /board?story=NS-12 (or a story id) opens the detail drawer.
   useEffect(() => {
     const param = searchParams.get('story')
     if (!param || !stories) return
@@ -42,30 +46,35 @@ export function Board() {
   function closeDrawer() {
     setOpenId(null)
     if (searchParams.has('story')) {
-      setSearchParams(
-        (prev) => {
-          prev.delete('story')
-          return prev
-        },
-        { replace: true },
-      )
+      setSearchParams((prev) => { prev.delete('story'); return prev }, { replace: true })
     }
   }
 
+  const known = useMemo(() => new Set(statuses.map((s) => s.name)), [statuses])
   const filtered = useMemo(
     () => (stories ?? []).filter((s) => (epicFilter ? s.epic_id === epicFilter : true)),
     [stories, epicFilter],
   )
-
   const byStatus = useMemo(() => {
-    const map: Record<StoryStatus, StoryFull[]> = {
-      backlog: [], todo: [], in_progress: [], in_review: [], done: [], canceled: [],
+    const map = new Map<string, StoryFull[]>()
+    for (const s of statuses) map.set(s.name, [])
+    map.set(NONE, [])
+    for (const s of filtered) {
+      const col = s.status && known.has(s.status) ? s.status : NONE
+      map.get(col)?.push(s)
     }
-    for (const s of filtered) map[s.status]?.push(s)
     return map
-  }, [filtered])
+  }, [filtered, statuses, known])
 
-  function moveTo(storyId: string, status: StoryStatus) {
+  // Render columns in order; only show "No status" if it has cards.
+  const columns = useMemo(() => {
+    const cols = statuses.map((s) => ({ name: s.name, color: s.color }))
+    if ((byStatus.get(NONE)?.length ?? 0) > 0) cols.push({ name: NONE, color: '#d4d4d8' })
+    return cols
+  }, [statuses, byStatus])
+
+  function moveTo(storyId: string, status: string) {
+    if (status === NONE) return
     const story = stories?.find((s) => s.id === storyId)
     if (story && story.status !== status) update.mutate({ id: storyId, status })
   }
@@ -74,18 +83,16 @@ export function Board() {
     <>
       <PageHeader
         title="Board"
-        subtitle="Every story, by status. Drag to move, click to open."
+        subtitle="Every story, by status. Columns come from your statuses — drag to move, click to open."
         action={
           <div className="flex items-center gap-2">
             <select className="input h-8 w-44 py-1 text-sm" value={epicFilter} onChange={(e) => setEpicFilter(e.target.value)}>
               <option value="">All epics</option>
               {epics.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.title}
-                </option>
+                <option key={e.id} value={e.id}>{e.title}</option>
               ))}
             </select>
-            <button className="btn btn-primary" onClick={() => setCreating('backlog')}>
+            <button className="btn btn-primary" onClick={() => setCreating(statuses[0]?.name ?? 'backlog')}>
               + New story
             </button>
           </div>
@@ -98,47 +105,51 @@ export function Board() {
           <ErrorState error={error} />
         ) : (
           <div className="scroll-thin flex h-full gap-3 overflow-x-auto px-7 py-5">
-            {BOARD_COLUMNS.map((status) => (
-              <div
-                key={status}
-                data-testid={`column-${status}`}
-                className="flex h-full w-72 shrink-0 flex-col rounded-xl bg-zinc-100/70"
-                onDragOver={(e) => {
-                  if (dragId) e.preventDefault()
-                }}
-                onDrop={() => {
-                  if (dragId) moveTo(dragId, status)
-                  setDragId(null)
-                }}
-              >
-                <div className="flex items-center justify-between px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${STORY_STATUS[status].dot}`} />
-                    <span className="text-sm font-medium text-zinc-700">{STORY_STATUS[status].label}</span>
-                    <span className="text-xs text-zinc-400">{byStatus[status].length}</span>
+            {columns.map((col) => {
+              const list = byStatus.get(col.name) ?? []
+              const label = col.name === NONE ? 'No status' : humanizeStatus(col.name)
+              return (
+                <div
+                  key={col.name}
+                  data-testid={`column-${slug(col.name)}`}
+                  className="flex h-full w-72 shrink-0 flex-col rounded-xl bg-zinc-100/70"
+                  onDragOver={(e) => { if (dragId) e.preventDefault() }}
+                  onDrop={() => { if (dragId) moveTo(dragId, col.name); setDragId(null) }}
+                >
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: col.color ?? '#d4d4d8' }} />
+                      <span className="truncate text-sm font-medium text-zinc-700" title={label}>{label}</span>
+                      <span className="shrink-0 text-xs text-zinc-400">{list.length}</span>
+                    </div>
+                    {col.name !== NONE && (
+                      <button
+                        className="btn btn-ghost px-1.5 py-0.5 text-base leading-none"
+                        title={`New story in ${label}`}
+                        onClick={() => setCreating(col.name)}
+                      >
+                        +
+                      </button>
+                    )}
                   </div>
-                  <button
-                    className="btn btn-ghost px-1.5 py-0.5 text-base leading-none"
-                    title={`New story in ${STORY_STATUS[status].label}`}
-                    onClick={() => setCreating(status)}
-                  >
-                    +
-                  </button>
-                </div>
 
-                <div className="scroll-thin flex-1 space-y-2 overflow-y-auto px-2 pb-3">
-                  {byStatus[status].map((story) => (
-                    <StoryCard
-                      key={story.id}
-                      story={story}
-                      onOpen={() => setOpenId(story.id)}
-                      onDragStart={() => setDragId(story.id)}
-                      onDragEnd={() => setDragId(null)}
-                    />
-                  ))}
+                  <div className="scroll-thin flex-1 space-y-2 overflow-y-auto px-2 pb-3">
+                    {list.slice(0, CAP).map((story) => (
+                      <StoryCard
+                        key={story.id}
+                        story={story}
+                        onOpen={() => setOpenId(story.id)}
+                        onDragStart={() => setDragId(story.id)}
+                        onDragEnd={() => setDragId(null)}
+                      />
+                    ))}
+                    {list.length > CAP && (
+                      <p className="px-1 py-2 text-center text-xs text-zinc-400">+{list.length - CAP} more</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -168,9 +179,7 @@ function StoryCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onOpen()
-      }}
+      onKeyDown={(e) => { if (e.key === 'Enter') onOpen() }}
       data-testid="story-card"
       data-story-title={story.title}
       className="card cursor-pointer p-3 shadow-sm transition hover:border-indigo-300 hover:shadow"

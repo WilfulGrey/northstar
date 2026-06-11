@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Drawer } from './Drawer'
 import { ProgressBar } from './ProgressBar'
 import { Sparkline } from './Sparkline'
-import { StoryStatusDot } from './Badges'
+import { KrStatusBadge, StoryStatusDot } from './Badges'
 import { Avatar } from './Avatar'
 import { useAuth } from '@/auth/AuthProvider'
 import { useAddCheckin, useEpics, useKrCheckins, useObjectives, useStories } from '@/lib/api'
@@ -42,7 +42,10 @@ export function KeyResultDetail({ keyResult, onClose }: { keyResult: KeyResult; 
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        <h2 className="text-base font-semibold text-zinc-900">{kr.title}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-zinc-900">{kr.title}</h2>
+          {kr.status && <KrStatusBadge status={kr.status} />}
+        </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="card p-4">
@@ -73,7 +76,7 @@ export function KeyResultDetail({ keyResult, onClose }: { keyResult: KeyResult; 
             <ul className="divide-y divide-zinc-100">
               {contributing.map((s) => (
                 <li key={s.id} className="flex items-center gap-3 py-2">
-                  <StoryStatusDot status={s.status} />
+                  <StoryStatusDot status={s.status} color={s.status_info?.color} />
                   <span className="min-w-0 flex-1 truncate text-sm text-zinc-700">{s.title}</span>
                   <span className="shrink-0 font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>
                 </li>

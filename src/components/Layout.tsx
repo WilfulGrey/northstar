@@ -13,6 +13,7 @@ const NAV = [
   { to: '/epics', label: 'Epics', icon: LayersIcon },
   { to: '/board', label: 'Board', icon: BoardIcon },
   { to: '/team', label: 'Team', icon: TeamIcon },
+  { to: '/integrations', label: 'Integrations', icon: PlugIcon },
 ]
 
 export function Layout() {
@@ -122,4 +123,7 @@ function UserIcon() {
 }
 function TeamIcon() {
   return base(<><circle cx="9" cy="8" r="3.2" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 5.5a3 3 0 0 1 0 5.8" /><path d="M17.5 20a6 6 0 0 0-3-5.2" /></>)
+}
+function PlugIcon() {
+  return base(<><path d="M9 2v6" /><path d="M15 2v6" /><path d="M7 8h10v3a5 5 0 0 1-10 0V8Z" /><path d="M12 16v6" /></>)
 }

@@ -85,6 +85,19 @@ async function main() {
   console.log('→ wiping existing planning data…')
   await wipe()
 
+  console.log('→ resetting board statuses to the demo set…')
+  // Stories are gone (wiped above), so the FK no longer references these.
+  const { error: delErr } = await db.from('task_statuses').delete().not('name', 'is', null)
+  if (delErr) throw new Error(`wipe task_statuses: ${delErr.message}`)
+  await insert('task_statuses', [
+    { name: 'backlog', position: 0, category: 'backlog', color: '#a1a1aa' },
+    { name: 'todo', position: 1, category: 'todo', color: '#a1a1aa' },
+    { name: 'in_progress', position: 2, category: 'in_progress', color: '#f59e0b' },
+    { name: 'in_review', position: 3, category: 'in_review', color: '#3b82f6' },
+    { name: 'done', position: 4, category: 'done', color: '#10b981' },
+    { name: 'canceled', position: 5, category: 'canceled', color: '#a1a1aa' },
+  ])
+
   console.log('→ creating cycle, objectives, key results…')
   const [cycle] = await insert('cycles', [
     { name: 'Q2 2026', starts_on: '2026-04-01', ends_on: '2026-06-30' },

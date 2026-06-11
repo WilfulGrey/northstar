@@ -9,8 +9,8 @@ import { StoryDetail } from '@/components/StoryDetail'
 import { ObjectiveDetail } from '@/components/ObjectiveDetail'
 import { useAuth } from '@/auth/AuthProvider'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
-import { alignment, displayName, epicAlignmentMap, isStoryAligned, objectiveProgress, pct } from '@/lib/format'
-import { ACTIVE_STORY_STATUSES, type ObjectiveFull } from '@/lib/types'
+import { alignment, displayName, epicAlignmentMap, isActiveStory, isStoryAligned, objectiveProgress, pct } from '@/lib/format'
+import type { ObjectiveFull } from '@/lib/types'
 
 export function Dashboard() {
   const { profile } = useAuth()
@@ -34,13 +34,10 @@ export function Dashboard() {
   )
   const epicAligned = useMemo(() => epicAlignmentMap(epics), [epics])
   const unaligned = useMemo(
-    () =>
-      stories.filter(
-        (s) => ACTIVE_STORY_STATUSES.includes(s.status) && !isStoryAligned(s, epicAligned),
-      ),
+    () => stories.filter((s) => isActiveStory(s) && !isStoryAligned(s, epicAligned)),
     [stories, epicAligned],
   )
-  const activeCount = stories.filter((s) => ACTIVE_STORY_STATUSES.includes(s.status)).length
+  const activeCount = stories.filter(isActiveStory).length
 
   return (
     <>

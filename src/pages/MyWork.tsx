@@ -6,15 +6,16 @@ import { PriorityIcon } from '@/components/Badges'
 import { EmptyState, ErrorState, Spinner } from '@/components/States'
 import { StoryDetail } from '@/components/StoryDetail'
 import { useAuth } from '@/auth/AuthProvider'
-import { useEpics, useObjectives, useStories } from '@/lib/api'
-import { epicAlignmentMap, isStoryAligned, objectiveProgress } from '@/lib/format'
-import { ACTIVE_STORY_STATUSES, BOARD_COLUMNS, STORY_STATUS, type StoryFull, type StoryStatus } from '@/lib/types'
+import { useEpics, useObjectives, useStories, useTaskStatuses } from '@/lib/api'
+import { epicAlignmentMap, humanizeStatus, isActiveStory, isStoryAligned, objectiveProgress } from '@/lib/format'
+import type { StoryFull } from '@/lib/types'
 
 export function MyWork() {
   const { user } = useAuth()
   const storiesQ = useStories()
   const { data: epics = [] } = useEpics()
   const { data: objectives = [] } = useObjectives()
+  const { data: statuses = [] } = useTaskStatuses()
   const [openId, setOpenId] = useState<string | null>(null)
 
   const uid = user?.id
@@ -22,15 +23,25 @@ export function MyWork() {
   const epicAligned = useMemo(() => epicAlignmentMap(epics), [epics])
 
   const mine = useMemo(() => stories.filter((s) => s.assignee_id === uid), [stories, uid])
-  const byStatus = useMemo(() => {
-    const map = new Map<StoryStatus, StoryFull[]>()
-    for (const status of BOARD_COLUMNS) map.set(status, [])
-    for (const s of mine) map.get(s.status)?.push(s)
-    return map
-  }, [mine])
+  const groups = useMemo(() => {
+    const map = new Map<string, StoryFull[]>()
+    for (const s of mine) {
+      const key = s.status ?? '__none'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(s)
+    }
+    const out: { name: string; label: string; color: string | null; list: StoryFull[] }[] = []
+    for (const s of statuses) {
+      const list = map.get(s.name)
+      if (list?.length) out.push({ name: s.name, label: humanizeStatus(s.name), color: s.color, list })
+    }
+    const none = map.get('__none')
+    if (none?.length) out.push({ name: '__none', label: 'No status', color: '#d4d4d8', list: none })
+    return out
+  }, [mine, statuses])
   const myObjectives = useMemo(() => objectives.filter((o) => o.owner_id === uid), [objectives, uid])
 
-  const activeMine = mine.filter((s) => ACTIVE_STORY_STATUSES.includes(s.status))
+  const activeMine = mine.filter(isActiveStory)
 
   return (
     <>
@@ -54,22 +65,20 @@ export function MyWork() {
                 <EmptyState title="Nothing assigned to you" hint="Stories you're assigned will show up here, grouped by status." />
               ) : (
                 <div className="space-y-5">
-                  {BOARD_COLUMNS.map((status) => {
-                    const list = byStatus.get(status) ?? []
-                    if (list.length === 0) return null
+                  {groups.map((g) => {
+                    const list = g.list
                     return (
-                      <div key={status}>
+                      <div key={g.name}>
                         <div className="mb-1.5 flex items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full ${STORY_STATUS[status].dot}`} />
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: g.color ?? '#d4d4d8' }} />
                           <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                            {STORY_STATUS[status].label}
+                            {g.label}
                           </span>
                           <span className="text-xs text-zinc-400">{list.length}</span>
                         </div>
                         <div className="card divide-y divide-zinc-100">
                           {list.map((s) => {
-                            const aligned = isStoryAligned(s, epicAligned)
-                            const flagUnaligned = ACTIVE_STORY_STATUSES.includes(s.status) && !aligned
+                            const flagUnaligned = isActiveStory(s) && !isStoryAligned(s, epicAligned)
                             return (
                               <button
                                 key={s.id}

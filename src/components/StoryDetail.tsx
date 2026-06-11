@@ -15,17 +15,16 @@ import {
   useObjectives,
   useProfiles,
   useStories,
+  useTaskStatuses,
   useUpdateStory,
 } from '@/lib/api'
-import { displayName, timeAgo } from '@/lib/format'
+import { displayName, humanizeStatus, timeAgo } from '@/lib/format'
 import {
   STORY_PRIORITY,
-  STORY_STATUS,
   type Activity,
   type Comment,
   type Profile,
   type StoryPriority,
-  type StoryStatus,
 } from '@/lib/types'
 
 export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: () => void }) {
@@ -33,6 +32,7 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
   const { data: profiles = [] } = useProfiles()
   const { data: epics = [] } = useEpics()
   const { data: objectives = [] } = useObjectives()
+  const { data: statuses = [] } = useTaskStatuses()
   const update = useUpdateStory()
   const del = useDeleteStory()
   const qc = useQueryClient()
@@ -103,9 +103,10 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
 
             <div className="mt-4 grid grid-cols-[110px_1fr] items-center gap-y-2.5 rounded-lg border border-zinc-100 bg-zinc-50/60 px-4 py-3 text-sm">
               <PropLabel>Status</PropLabel>
-              <select className="prop-select" aria-label="Story status" value={story.status} onChange={(e) => set({ status: e.target.value as StoryStatus })}>
-                {Object.entries(STORY_STATUS).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
+              <select className="prop-select" aria-label="Story status" value={story.status ?? ''} onChange={(e) => set({ status: e.target.value })}>
+                {story.status == null && <option value="">No status</option>}
+                {statuses.map((s) => (
+                  <option key={s.name} value={s.name}>{humanizeStatus(s.name)}</option>
                 ))}
               </select>
 
@@ -293,7 +294,7 @@ function activitySentence(
   epicsById: Map<string, { title: string }>,
 ): string {
   const who = displayName(a.actor) === 'Unassigned' ? 'Someone' : displayName(a.actor)
-  const status = (v: string | null) => (v ? STORY_STATUS[v as StoryStatus]?.label ?? v : '—')
+  const status = (v: string | null) => (v ? humanizeStatus(v) : '—')
   const prio = (v: string | null) => (v ? STORY_PRIORITY[v as StoryPriority]?.label ?? v : '—')
   const person = (v: string | null) => (v ? displayName(profilesById.get(v)) : 'Unassigned')
   const epic = (v: string | null) => (v ? epicsById.get(v)?.title ?? 'an epic' : 'No epic')

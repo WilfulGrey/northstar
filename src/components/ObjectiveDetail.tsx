@@ -4,7 +4,7 @@ import { ProgressBar } from './ProgressBar'
 import { Avatar } from './Avatar'
 import { ObjectiveStatusBadge, EpicStatusBadge, StoryStatusDot } from './Badges'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
-import { epicProgress, keyResultWork, krProgress, objectiveProgress, pct } from '@/lib/format'
+import { epicProgress, isCanceledStory, isDoneStory, keyResultWork, krProgress, objectiveProgress, pct } from '@/lib/format'
 import type { ObjectiveFull } from '@/lib/types'
 
 export function ObjectiveDetail({ objective, onClose }: { objective: ObjectiveFull; onClose: () => void }) {
@@ -23,10 +23,10 @@ export function ObjectiveDetail({ objective, onClose }: { objective: ObjectiveFu
     const epicIds = new Set(servingEpics.map((e) => e.id))
     const contributing = stories.filter(
       (s) =>
-        s.status !== 'canceled' &&
+        !isCanceledStory(s) &&
         ((s.epic_id != null && epicIds.has(s.epic_id)) || (s.key_result_id != null && krIds.has(s.key_result_id))),
     )
-    const done = contributing.filter((s) => s.status === 'done').length
+    const done = contributing.filter(isDoneStory).length
     return { contributing, done, total: contributing.length, ratio: contributing.length ? done / contributing.length : 0 }
   }, [servingEpics, stories, krIds])
 
@@ -119,7 +119,7 @@ export function ObjectiveDetail({ objective, onClose }: { objective: ObjectiveFu
           <ul className="divide-y divide-zinc-100">
             {scope.contributing.slice(0, 12).map((s) => (
               <li key={s.id} className="flex items-center gap-3 py-2">
-                <StoryStatusDot status={s.status} />
+                <StoryStatusDot status={s.status} color={s.status_info?.color} />
                 <span className="min-w-0 flex-1 truncate text-sm text-zinc-700">{s.title}</span>
                 <span className="shrink-0 font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>
               </li>

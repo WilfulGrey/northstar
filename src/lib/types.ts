@@ -1,10 +1,22 @@
 // Domain types — mirror the Postgres schema in supabase/migrations.
 
+// Statuses are now free text (synced 1:1 from Airtable). These aliases name the
+// values the demo seed uses and the modal option lists; any string is valid.
 export type ObjectiveStatus = 'on_track' | 'at_risk' | 'off_track' | 'achieved' | 'missed'
 export type KrMetric = 'number' | 'percent' | 'currency' | 'boolean'
 export type EpicStatus = 'backlog' | 'planned' | 'in_progress' | 'completed' | 'canceled'
-export type StoryStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'canceled'
 export type StoryPriority = 'none' | 'urgent' | 'high' | 'medium' | 'low'
+
+// Semantic bucket a task status maps to (drives alignment / progress).
+export type StatusCategory = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'canceled'
+
+export interface TaskStatus {
+  name: string
+  position: number
+  color: string | null
+  category: StatusCategory
+  created_at?: string
+}
 
 export interface Profile {
   id: string
@@ -28,7 +40,8 @@ export interface Objective {
   description: string | null
   cycle_id: string | null
   owner_id: string | null
-  status: ObjectiveStatus
+  status: string | null
+  airtable_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -42,6 +55,8 @@ export interface KeyResult {
   target_value: number
   current_value: number
   unit: string | null
+  status: string | null
+  airtable_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -50,11 +65,12 @@ export interface Epic {
   id: string
   title: string
   description: string | null
-  status: EpicStatus
+  status: string | null
   objective_id: string | null
   key_result_id: string | null
   owner_id: string | null
   color: string
+  airtable_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -99,13 +115,14 @@ export interface Story {
   ref: number
   title: string
   description: string | null
-  status: StoryStatus
+  status: string | null
   priority: StoryPriority
   estimate: number | null
   epic_id: string | null
   key_result_id: string | null
   assignee_id: string | null
   position: number
+  airtable_id?: string | null
   created_at: string
   updated_at: string
   completed_at: string | null
@@ -129,11 +146,25 @@ export interface StoryFull extends Story {
   epic: Pick<Epic, 'id' | 'title' | 'color' | 'objective_id'> | null
   assignee: Profile | null
   key_result: Pick<KeyResult, 'id' | 'title'> | null
+  status_info: Pick<TaskStatus, 'name' | 'category' | 'color' | 'position'> | null
 }
 
 // --- Display metadata ---
 
-export const OBJECTIVE_STATUS: Record<ObjectiveStatus, { label: string; dot: string; text: string; bg: string }> = {
+// Styling per semantic category — used to color status dots/badges when a status
+// has no explicit color (e.g. synced epic/objective statuses).
+export const CATEGORY_STYLE: Record<StatusCategory, { dot: string; text: string; bg: string }> = {
+  backlog: { dot: 'bg-zinc-300', text: 'text-zinc-600', bg: 'bg-zinc-100' },
+  todo: { dot: 'bg-zinc-400', text: 'text-zinc-700', bg: 'bg-zinc-100' },
+  in_progress: { dot: 'bg-amber-400', text: 'text-amber-700', bg: 'bg-amber-50' },
+  in_review: { dot: 'bg-blue-400', text: 'text-blue-700', bg: 'bg-blue-50' },
+  done: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
+  canceled: { dot: 'bg-zinc-300', text: 'text-zinc-500', bg: 'bg-zinc-100' },
+}
+
+// Known styling for the demo's curated objective/epic status values. Synced
+// values fall back to category inference (see format.ts).
+export const OBJECTIVE_STATUS: Record<string, { label: string; dot: string; text: string; bg: string }> = {
   on_track: { label: 'On track', dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
   at_risk: { label: 'At risk', dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
   off_track: { label: 'Off track', dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50' },
@@ -141,7 +172,7 @@ export const OBJECTIVE_STATUS: Record<ObjectiveStatus, { label: string; dot: str
   missed: { label: 'Missed', dot: 'bg-zinc-400', text: 'text-zinc-600', bg: 'bg-zinc-100' },
 }
 
-export const EPIC_STATUS: Record<EpicStatus, { label: string; text: string; bg: string }> = {
+export const EPIC_STATUS: Record<string, { label: string; text: string; bg: string }> = {
   backlog: { label: 'Backlog', text: 'text-zinc-600', bg: 'bg-zinc-100' },
   planned: { label: 'Planned', text: 'text-blue-700', bg: 'bg-blue-50' },
   in_progress: { label: 'In progress', text: 'text-amber-700', bg: 'bg-amber-50' },
@@ -149,20 +180,9 @@ export const EPIC_STATUS: Record<EpicStatus, { label: string; text: string; bg: 
   canceled: { label: 'Canceled', text: 'text-zinc-500', bg: 'bg-zinc-100' },
 }
 
-export const STORY_STATUS: Record<StoryStatus, { label: string; dot: string }> = {
-  backlog: { label: 'Backlog', dot: 'bg-zinc-300' },
-  todo: { label: 'Todo', dot: 'bg-zinc-400' },
-  in_progress: { label: 'In progress', dot: 'bg-amber-400' },
-  in_review: { label: 'In review', dot: 'bg-blue-400' },
-  done: { label: 'Done', dot: 'bg-emerald-500' },
-  canceled: { label: 'Canceled', dot: 'bg-zinc-300' },
-}
-
-// Order of columns on the board.
-export const BOARD_COLUMNS: StoryStatus[] = ['backlog', 'todo', 'in_progress', 'in_review', 'done']
-
-// "Active" work = in flight right now. Used by the alignment metric.
-export const ACTIVE_STORY_STATUSES: StoryStatus[] = ['todo', 'in_progress', 'in_review']
+// Status values offered in the create/edit modals (the demo's curated set).
+export const OBJECTIVE_STATUS_OPTIONS = ['on_track', 'at_risk', 'off_track', 'achieved', 'missed']
+export const EPIC_STATUS_OPTIONS = ['backlog', 'planned', 'in_progress', 'completed', 'canceled']
 
 export const STORY_PRIORITY: Record<StoryPriority, { label: string; rank: number; text: string; icon: string }> = {
   urgent: { label: 'Urgent', rank: 0, text: 'text-red-600', icon: '!!' },

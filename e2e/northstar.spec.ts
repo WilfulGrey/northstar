@@ -92,7 +92,7 @@ test('creates a story and moves it across the board', async ({ page }) => {
   await page.getByLabel('Story status').selectOption({ label: 'In progress' })
   await page.keyboard.press('Escape') // close the drawer
 
-  await expect(page.getByTestId('column-in_progress').locator(`[data-story-title="${storyTitle}"]`)).toBeVisible()
+  await expect(page.getByTestId('column-in-progress').locator(`[data-story-title="${storyTitle}"]`)).toBeVisible()
   await expect(page.getByTestId('column-backlog').locator(`[data-story-title="${storyTitle}"]`)).toHaveCount(0)
 })
 
@@ -213,4 +213,13 @@ test('lists unaligned in-flight work on the dashboard', async ({ page }) => {
   const section = page.getByText(/Unaligned work in flight \(\d+\)/)
   await expect(section).toBeVisible()
   await expect(page.getByTestId('alignment-pct')).toHaveText(/%$/)
+})
+
+// Runs LAST: it imports the full Airtable base, so it shouldn't precede other tests.
+test('syncs the Airtable base through the edge function', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Integrations', exact: true }).click()
+  await page.getByRole('button', { name: 'Sync from Airtable', exact: true }).click()
+  await expect(page.getByTestId('sync-result')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('sync-result')).toContainText(/statuses/)
 })

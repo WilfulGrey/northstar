@@ -14,6 +14,7 @@ import type {
   Profile,
   Story,
   StoryFull,
+  TaskStatus,
 } from './types'
 
 export const keys = {
@@ -22,6 +23,7 @@ export const keys = {
   objectives: ['objectives'] as const,
   epics: ['epics'] as const,
   stories: ['stories'] as const,
+  taskStatuses: ['task_statuses'] as const,
   comments: (storyId: string) => ['comments', storyId] as const,
   activity: (storyId: string) => ['activity', storyId] as const,
   checkins: (krId: string) => ['checkins', krId] as const,
@@ -87,9 +89,19 @@ export function useStories() {
         await supabase
           .from('stories')
           .select(
-            '*, epic:epics(id,title,color,objective_id), assignee:profiles(*), key_result:key_results(id,title)',
+            '*, epic:epics(id,title,color,objective_id), assignee:profiles(*), key_result:key_results(id,title), status_info:task_statuses(name,category,color,position)',
           )
           .order('position', { ascending: true }),
+      ),
+  })
+}
+
+export function useTaskStatuses() {
+  return useQuery({
+    queryKey: keys.taskStatuses,
+    queryFn: async () =>
+      throwOnError<TaskStatus[]>(
+        await supabase.from('task_statuses').select('*').order('position', { ascending: true }),
       ),
   })
 }
@@ -272,6 +284,41 @@ export function useInviteMember() {
   })
 }
 
+// Airtable sync — runs server-side; refreshes everything it can touch.
+export interface SyncResult {
+  ok: boolean
+  ms: number
+  statuses: number
+  objectives: { created: number; updated: number; total: number }
+  key_results: { created: number; updated: number; total: number; skipped: number }
+  epics: { created: number; updated: number; total: number }
+  stories: { created: number; updated: number; total: number }
+}
+export function useSyncAirtable() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (): Promise<SyncResult> => {
+      const { data, error } = await supabase.functions.invoke('sync-airtable', { body: {} })
+      if (error) {
+        let message = error.message
+        try {
+          const body = await (error as { context?: Response }).context?.json()
+          if (body?.error) message = body.error
+        } catch {
+          // keep default
+        }
+        throw new Error(message)
+      }
+      return data as SyncResult
+    },
+    onSuccess: () => {
+      for (const k of [keys.objectives, keys.epics, keys.stories, keys.taskStatuses]) {
+        qc.invalidateQueries({ queryKey: k })
+      }
+    },
+  })
+}
+
 // KR check-ins — records history AND advances the key result's current value.
 export function useAddCheckin(keyResultId: string) {
   const qc = useQueryClient()
@@ -342,6 +389,7 @@ export function useRealtimeSync() {
         invalidate(qc, ['checkins'])
         invalidate(qc, keys.objectives)
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_statuses' }, () => invalidate(qc, keys.taskStatuses))
       .subscribe()
     return () => {
       supabase.removeChannel(channel)

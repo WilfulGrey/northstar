@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '@/components/Modal'
 import { useCreateObjective, useCycles, useProfiles, useUpdateObjective } from '@/lib/api'
-import { OBJECTIVE_STATUS, type ObjectiveFull, type ObjectiveStatus } from '@/lib/types'
+import { OBJECTIVE_STATUS, type ObjectiveFull } from '@/lib/types'
 import { displayName } from '@/lib/format'
 
 export function ObjectiveModal({
@@ -21,7 +21,7 @@ export function ObjectiveModal({
 
   const [title, setTitle] = useState(objective?.title ?? '')
   const [description, setDescription] = useState(objective?.description ?? '')
-  const [status, setStatus] = useState<ObjectiveStatus>(objective?.status ?? 'on_track')
+  const [status, setStatus] = useState<string>(objective?.status ?? 'on_track')
   const [ownerId, setOwnerId] = useState(objective?.owner_id ?? '')
   const [cycleId, setCycleId] = useState(objective?.cycle_id ?? '')
   const busy = create.isPending || update.isPending
@@ -83,7 +83,7 @@ export function ObjectiveModal({
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="label">Status</label>
-            <select className="input" value={status} onChange={(e) => setStatus(e.target.value as ObjectiveStatus)}>
+            <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
               {Object.entries(OBJECTIVE_STATUS).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v.label}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '@/components/Modal'
 import { useCreateEpic, useObjectives, useProfiles, useUpdateEpic } from '@/lib/api'
-import { EPIC_STATUS, type Epic, type EpicStatus } from '@/lib/types'
+import { EPIC_STATUS, type Epic } from '@/lib/types'
 import { displayName } from '@/lib/format'
 
 const COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#64748b']
@@ -15,7 +15,7 @@ export function EpicModal({ open, onClose, epic }: { open: boolean; onClose: () 
 
   const [title, setTitle] = useState(epic?.title ?? '')
   const [description, setDescription] = useState(epic?.description ?? '')
-  const [status, setStatus] = useState<EpicStatus>(epic?.status ?? 'backlog')
+  const [status, setStatus] = useState<string>(epic?.status ?? 'backlog')
   const [objectiveId, setObjectiveId] = useState(epic?.objective_id ?? '')
   const [keyResultId, setKeyResultId] = useState(epic?.key_result_id ?? '')
   const [ownerId, setOwnerId] = useState(epic?.owner_id ?? '')
@@ -90,7 +90,7 @@ export function EpicModal({ open, onClose, epic }: { open: boolean; onClose: () 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Status</label>
-            <select className="input" value={status} onChange={(e) => setStatus(e.target.value as EpicStatus)}>
+            <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
               {Object.entries(EPIC_STATUS).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v.label}

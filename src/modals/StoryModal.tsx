@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Modal } from '@/components/Modal'
-import { useCreateStory, useEpics, useObjectives, useProfiles, useUpdateStory } from '@/lib/api'
-import { STORY_PRIORITY, STORY_STATUS, type StoryFull, type StoryPriority, type StoryStatus } from '@/lib/types'
-import { displayName } from '@/lib/format'
+import { useCreateStory, useEpics, useObjectives, useProfiles, useTaskStatuses, useUpdateStory } from '@/lib/api'
+import { STORY_PRIORITY, type StoryFull, type StoryPriority } from '@/lib/types'
+import { displayName, humanizeStatus } from '@/lib/format'
 
 export function StoryModal({
   open,
@@ -14,19 +14,20 @@ export function StoryModal({
   open: boolean
   onClose: () => void
   story?: StoryFull | null
-  defaultStatus?: StoryStatus
+  defaultStatus?: string
   defaultEpicId?: string
 }) {
   const { data: epics = [] } = useEpics()
   const { data: profiles = [] } = useProfiles()
   const { data: objectives = [] } = useObjectives()
+  const { data: statuses = [] } = useTaskStatuses()
   const create = useCreateStory()
   const update = useUpdateStory()
   const editing = !!story
 
   const [title, setTitle] = useState(story?.title ?? '')
   const [description, setDescription] = useState(story?.description ?? '')
-  const [status, setStatus] = useState<StoryStatus>(story?.status ?? defaultStatus)
+  const [status, setStatus] = useState<string>(story?.status ?? defaultStatus)
   const [priority, setPriority] = useState<StoryPriority>(story?.priority ?? 'none')
   const [estimate, setEstimate] = useState(story?.estimate != null ? String(story.estimate) : '')
   const [epicId, setEpicId] = useState(story?.epic_id ?? defaultEpicId)
@@ -93,10 +94,10 @@ export function StoryModal({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
             <label className="label">Status</label>
-            <select className="input" aria-label="Story status" value={status} onChange={(e) => setStatus(e.target.value as StoryStatus)}>
-              {Object.entries(STORY_STATUS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v.label}
+            <select className="input" aria-label="Story status" value={status} onChange={(e) => setStatus(e.target.value)}>
+              {statuses.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {humanizeStatus(s.name)}
                 </option>
               ))}
             </select>

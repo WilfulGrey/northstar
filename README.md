@@ -68,6 +68,23 @@ on the right things?*
 3. **Shareable story deep links.** `…/board?story=NS-42` opens a story directly; the drawer
    has a **Copy link** button and ⌘K story results land straight on the card.
 
+## What's new in v1.4 — Airtable connector
+
+The team's data lives in Airtable; this brings it in. An **Integrations** page runs a
+one-click sync that pulls the whole **Objective → Key Result → Epic → Task** hierarchy and
+upserts it by Airtable record id (idempotent — re-running is safe).
+
+The interesting decision: **statuses are no longer enums, they're data.** Airtable's Tasks
+have 16 workflow statuses; rather than collapse them, the sync writes them **1:1** into a
+`task_statuses` table that *drives the board columns*. Add a status in Airtable and it
+becomes a new column on the next sync — no code change. A semantic `category` on each status
+(inferred at sync time, editable) is what alignment/progress still key off, so the board can
+have 16 columns while "done" and "in flight" keep their meaning.
+
+The Airtable token never touches the browser — the sync is a second **Edge Function**
+(`supabase/functions/sync-airtable`, `verify_jwt` on) that holds the token as a Supabase
+secret. Real run: **3 objectives, 10 key results, 71 epics, 1220 tasks in ~5s.**
+
 ## Product decisions (and what I deliberately left out)
 
 - **One shared workspace, not multi-tenant.** A small team is the unit. RLS gives every
@@ -89,7 +106,7 @@ on the right things?*
 | Data/Auth | **Supabase** (Postgres + Auth + RLS + Realtime) | Browser talks to the DB directly; RLS is the security boundary |
 | Hosting   | **Render Static Site** | On the free tier a static site has **no cold starts** — a Node server spins down after 15 min and demos badly |
 | State     | **TanStack Query** | Caching, loading/error states, and Realtime-driven invalidation |
-| Server    | **Supabase Edge Function** (Deno) for privileged ops (team invites) | Keeps the service-role key off the client |
+| Server    | **Supabase Edge Functions** (Deno): team invites + Airtable sync | Keeps service-role / Airtable tokens off the client |
 | Tests     | **Playwright** e2e against the live database | Proves the real path, not mocks |
 
 Because the app is a static bundle hitting Supabase directly, **Row Level Security is the
@@ -98,9 +115,11 @@ entire backend authorization layer** — see `supabase/migrations`.
 ## Data model
 
 `profiles` · `cycles` · `objectives` · `key_results` · `epics` · `stories` ·
-`comments` · `activity` · `kr_checkins` — full schema, enums, triggers, RLS policies and
-the Realtime publication live in [`supabase/migrations/`](supabase/migrations)
-(v1.0 init + v1.1 + v1.2).
+`comments` · `activity` · `kr_checkins` · `task_statuses` — full schema, triggers, RLS
+policies and the Realtime publication live in
+[`supabase/migrations/`](supabase/migrations) (v1.0 → v1.4). Statuses are free text backed
+by `task_statuses`; `stories`/`epics`/`objectives`/`key_results` carry an `airtable_id` for
+idempotent sync.
 
 ## Run it locally
 
@@ -150,9 +169,10 @@ src/
   components/   Layout, Modal, Avatar, ProgressBar, badges, states
   lib/          supabase client, types, progress/alignment math, React Query hooks
   modals/       create/edit forms for objectives, key results, epics, stories
-  pages/        Login, Dashboard (alignment), My Work, OKRs, Epics, Board, Team
+  pages/        Login, Dashboard, My Work, OKRs, Epics, Board, Team, Integrations
 supabase/migrations/             Postgres schema + RLS
-supabase/functions/invite-member Edge Function (Deno) — privileged team invites
+supabase/functions/invite-member Edge Function — privileged team invites
+supabase/functions/sync-airtable Edge Function — Airtable → Northstar sync
 scripts/seed.mjs                 idempotent demo seed
-e2e/                             Playwright specs (15)
+e2e/                             Playwright specs (16)
 ```
