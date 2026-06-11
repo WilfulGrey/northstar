@@ -12,6 +12,7 @@ import { displayName, humanizeStatus } from '@/lib/format'
 import type { StoryFull, TaskStatus } from '@/lib/types'
 
 const NONE = '__none'
+const UNASSIGNED = '__unassigned' // assignee-filter sentinel for "nobody"
 const CAP = 50 // keep the board responsive even after syncing 1000+ tasks
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'none'
 
@@ -59,11 +60,11 @@ export function Board() {
   }
 
   const known = useMemo(() => new Set(statuses.map((s) => s.name)), [statuses])
+  const matchesAssignee = (s: StoryFull) =>
+    !assignee ? true : assignee === UNASSIGNED ? s.assignee_id == null : s.assignee_id === assignee
   const filtered = useMemo(
-    () =>
-      (stories ?? []).filter(
-        (s) => (epicFilter ? s.epic_id === epicFilter : true) && (assignee ? s.assignee_id === assignee : true),
-      ),
+    () => (stories ?? []).filter((s) => (epicFilter ? s.epic_id === epicFilter : true) && matchesAssignee(s)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [stories, epicFilter, assignee],
   )
   const byStatus = useMemo(() => {
@@ -121,6 +122,7 @@ export function Board() {
                 onChange={(e) => setAssigneeFilter(e.target.value)}
               >
                 <option value="">All assignees</option>
+                <option value={UNASSIGNED}>Unassigned</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.id === me ? `Me · ${displayName(p)}` : displayName(p)}

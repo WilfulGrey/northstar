@@ -250,6 +250,10 @@ test('board assignee filter defaults to Me and clears to all', async ({ page }) 
   // Clearing the filter reveals everyone's tasks.
   await page.getByRole('button', { name: 'Clear assignee filter' }).click()
   await expect(page.getByText('Add Sentry error tracking')).toBeVisible()
+
+  // "Unassigned" shows only tasks with no assignee, so an assigned task is hidden.
+  await page.getByLabel('Filter by assignee').selectOption({ label: 'Unassigned' })
+  await expect(page.getByText('Postmortem template & on-call rota')).toHaveCount(0)
 })
 
 // Runs LAST: imports the full Airtable base into the (separate) mamamia workspace.
