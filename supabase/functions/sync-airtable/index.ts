@@ -1,11 +1,11 @@
-// Northstar — Airtable → Northstar sync (per workspace, caller-supplied creds).
+// Northstar — manual sync / connect (per workspace).
 //
-// The Airtable token + base id come in the request body (never stored, never a
-// shared secret) so each workspace pulls its OWN base. Tables are discovered by
-// name (Team, Objectives, Key Results, Epics, Tasks). Everything is written into
-// the caller's workspace and upserted by (workspace_id, airtable_id).
+// First call with { token, baseId } CONNECTS the workspace: the token is stored
+// server-side (workspace_integrations) for the whole org. Later calls with no
+// body re-use the stored token ("Sync now"). Statuses come 1:1 from Airtable.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
+import { syncWorkspace } from '../_shared/sync.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -13,40 +13,6 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } })
-
-const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#64748b']
-const CAT_COLOR: Record<string, string> = { backlog: '#a1a1aa', todo: '#a1a1aa', in_progress: '#f59e0b', in_review: '#3b82f6', done: '#10b981', canceled: '#a1a1aa' }
-const colorFor = (s: string) => PALETTE[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % PALETTE.length]
-
-function taskCategory(name: string): string {
-  const n = name.trim().toLowerCase()
-  const m: Record<string, string> = {
-    'backlog': 'backlog', 'sprint backlog': 'backlog', 'to do': 'todo', 'sprint': 'todo',
-    'in progress': 'in_progress', 'rollback': 'in_progress', 'frozen development': 'in_progress',
-    'ready for test on beta': 'in_review', 'verification beta': 'in_review', 'frozen testing': 'in_review',
-    'tests on beta passed': 'in_review', 'ready for prod test': 'in_review', 'verification on prod': 'in_review',
-    'merged to prod': 'done', 'mm live': 'done', 'rejected': 'canceled',
-  }
-  if (m[n]) return m[n]
-  if (/(done|live|complete|shipped|merged)/.test(n)) return 'done'
-  if (/(reject|cancel|dropped)/.test(n)) return 'canceled'
-  if (/(review|test|verif|qa|beta)/.test(n)) return 'in_review'
-  if (/(progress|doing|rollback)/.test(n)) return 'in_progress'
-  if (/(to ?do|sprint|ready|next)/.test(n)) return 'todo'
-  return 'backlog'
-}
-function mapPriority(v: unknown): string {
-  if (!v) return 'none'
-  const n = String(v).toLowerCase()
-  if (n.includes('urgent')) return 'urgent'
-  if (n.includes('high')) return 'high'
-  if (n.includes('med')) return 'medium'
-  if (n.includes('low')) return 'low'
-  return 'none'
-}
-
-type Rec = { id: string; fields: Record<string, unknown> }
-const first = (v: unknown): string | null => (Array.isArray(v) && v.length ? (v[0] as string) : null)
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
@@ -60,195 +26,36 @@ Deno.serve(async (req) => {
   const { data: { user } } = await caller.auth.getUser()
   if (!user) return json({ error: 'Unauthorized' }, 401)
 
-  let body: { token?: string; baseId?: string }
-  try { body = await req.json() } catch { return json({ error: 'Invalid JSON body' }, 400) }
+  let body: { token?: string; baseId?: string } = {}
+  try { body = await req.json() } catch { /* empty body = sync with stored creds */ }
   const token = (body.token ?? '').trim()
   const baseId = (body.baseId ?? '').trim()
-  if (!token || !baseId) return json({ error: 'Provide your Airtable token and base id.' }, 400)
 
   const db = createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } })
-
-  // The caller's workspace — everything is written here.
   const { data: prof } = await db.from('profiles').select('workspace_id').eq('auth_user_id', user.id).maybeSingle()
   const W = prof?.workspace_id as string | undefined
   if (!W) return json({ error: 'No workspace for this account.' }, 400)
 
-  const at = { Authorization: `Bearer ${token}` }
-  const started = Date.now()
+  // Connect / update credentials if provided.
+  if (token && baseId) {
+    const { error } = await db.from('workspace_integrations').upsert({
+      workspace_id: W, provider: 'airtable', token, base_id: baseId, enabled: true, updated_at: new Date().toISOString(),
+    })
+    if (error) return json({ error: `Could not save connection: ${error.message}` }, 500)
+    await db.from('workspaces').update({ airtable_connected: true, airtable_base_id: baseId }).eq('id', W)
+  }
 
-  async function fetchAll(tableId: string, fields: string[]): Promise<Rec[]> {
-    const out: Rec[] = []
-    let offset: string | undefined
-    do {
-      const u = new URL(`https://api.airtable.com/v0/${baseId}/${tableId}`)
-      u.searchParams.set('pageSize', '100')
-      for (const f of fields) u.searchParams.append('fields[]', f)
-      if (offset) u.searchParams.set('offset', offset)
-      const r = await fetch(u, { headers: at })
-      const j = await r.json()
-      if (j.error) throw new Error(`Airtable ${tableId}: ${JSON.stringify(j.error)}`)
-      out.push(...j.records); offset = j.offset
-    } while (offset)
-    return out
-  }
-  async function upsert(table: string, rows: Record<string, unknown>[]) {
-    for (let i = 0; i < rows.length; i += 200) {
-      const { error } = await db.from(table).upsert(rows.slice(i, i + 200), { onConflict: 'workspace_id,airtable_id' })
-      if (error) throw new Error(`upsert ${table}: ${error.message}`)
-    }
-  }
-  async function idMap(table: string, extra = ''): Promise<Map<string, Record<string, unknown>>> {
-    const { data, error } = await db.from(table).select(`id,airtable_id${extra}`).eq('workspace_id', W).not('airtable_id', 'is', null)
-    if (error) throw new Error(`map ${table}: ${error.message}`)
-    return new Map((data ?? []).map((r: Record<string, unknown>) => [r.airtable_id as string, r]))
-  }
-  async function existing(table: string): Promise<Set<string>> {
-    const { data } = await db.from(table).select('airtable_id').eq('workspace_id', W).not('airtable_id', 'is', null)
-    return new Set((data ?? []).map((r: { airtable_id: string }) => r.airtable_id))
-  }
-  const tally = (before: Set<string>, rows: { airtable_id: string }[]) => {
-    const created = rows.filter((r) => !before.has(r.airtable_id)).length
-    return { created, updated: rows.length - created, total: rows.length }
-  }
+  // Load stored credentials (works whether we just connected or not).
+  const { data: integ } = await db.from('workspace_integrations').select('token,base_id,enabled').eq('workspace_id', W).maybeSingle()
+  if (!integ) return json({ error: 'Airtable is not connected. Provide a token and base id first.' }, 400)
 
   try {
-    // ---- discover tables + task status options ----
-    const metaRes = await fetch(`https://api.airtable.com/v0/meta/bases/${baseId}/tables`, { headers: at })
-    const meta = await metaRes.json()
-    if (meta.error) throw new Error(`Airtable schema: ${JSON.stringify(meta.error)}`)
-    const byName = (n: string) => meta.tables.find((t: { name: string }) => t.name.toLowerCase() === n.toLowerCase())
-    const T_TEAM = byName('Team')?.id
-    const T_OBJ = byName('Objectives')?.id
-    const T_KR = byName('Key Results')?.id
-    const T_EPICS = byName('Epics')?.id
-    const T_TASKS = byName('Tasks')?.id
-    if (!T_TASKS) return json({ error: 'No "Tasks" table found in this base.' }, 400)
-    const statusField = byName('Tasks').fields.find((f: { name: string }) => f.name === 'Status')
-    const optionNames: string[] = (statusField?.options?.choices ?? []).map((c: { name: string }) => c.name)
-
-    // ---- Team → profiles ----
-    let teamByAt = new Map<string, string>()
-    if (T_TEAM) {
-      const recs = await fetchAll(T_TEAM, ['Name', 'Email'])
-      await upsert('profiles', recs.map((r) => ({
-        workspace_id: W, airtable_id: r.id,
-        full_name: String(r.fields['Name'] ?? 'Unknown'),
-        email: (r.fields['Email'] as string) ?? null,
-        avatar_color: colorFor(String(r.fields['Name'] ?? r.id)),
-      })))
-      const m = await idMap('profiles')
-      teamByAt = new Map([...m].map(([atId, row]) => [atId, row.id as string]))
-    }
-
-    // ---- Objectives ----
-    let objSummary = { created: 0, updated: 0, total: 0 }
-    let objByAt = new Map<string, Record<string, unknown>>()
-    if (T_OBJ) {
-      const before = await existing('objectives')
-      const recs = await fetchAll(T_OBJ, ['Objective Name', 'Objective Description', 'Status', 'Assigned Stakeholders'])
-      const rows = recs.map((r) => ({
-        workspace_id: W, airtable_id: r.id,
-        title: String(r.fields['Objective Name'] ?? '(untitled objective)'),
-        description: (r.fields['Objective Description'] as string) ?? null,
-        status: (r.fields['Status'] as string) ?? null,
-        owner_id: teamByAt.get(first(r.fields['Assigned Stakeholders']) ?? '') ?? null,
-      }))
-      await upsert('objectives', rows)
-      objSummary = tally(before, rows)
-      objByAt = await idMap('objectives')
-    }
-
-    // ---- Key Results ----
-    let krSummary = { created: 0, updated: 0, total: 0, skipped: 0 }
-    let krByAt = new Map<string, Record<string, unknown>>()
-    if (T_KR) {
-      const before = await existing('key_results')
-      const recs = await fetchAll(T_KR, ['Key Result', 'Objective', 'Status', 'Progress'])
-      let skipped = 0
-      const rows: Record<string, unknown>[] = []
-      for (const r of recs) {
-        const obj = objByAt.get(first(r.fields['Objective']) ?? '')
-        if (!obj) { skipped++; continue }
-        const p = r.fields['Progress']
-        const current = typeof p === 'number' ? (p <= 1 ? Math.round(p * 100) : Math.round(p)) : 0
-        rows.push({
-          workspace_id: W, airtable_id: r.id, objective_id: obj.id,
-          title: String(r.fields['Key Result'] ?? '(untitled KR)'),
-          metric: 'percent', start_value: 0, target_value: 100, current_value: current,
-          status: (r.fields['Status'] as string) ?? null,
-        })
-      }
-      await upsert('key_results', rows)
-      krSummary = { ...tally(before, rows as { airtable_id: string }[]), skipped }
-      krByAt = await idMap('key_results', ',objective_id')
-    }
-
-    // ---- Epics ----
-    let epSummary = { created: 0, updated: 0, total: 0 }
-    let epByAt = new Map<string, Record<string, unknown>>()
-    if (T_EPICS) {
-      const before = await existing('epics')
-      const recs = await fetchAll(T_EPICS, ['Epic Name', 'Description', 'Epic Status', 'Key Result', 'DRI'])
-      const rows = recs.map((r) => {
-        const kr = krByAt.get(first(r.fields['Key Result']) ?? '')
-        const name = String(r.fields['Epic Name'] ?? '(untitled epic)')
-        return {
-          workspace_id: W, airtable_id: r.id, title: name,
-          description: (r.fields['Description'] as string) ?? null,
-          status: (r.fields['Epic Status'] as string) ?? null,
-          key_result_id: kr?.id ?? null,
-          objective_id: kr?.objective_id ?? null,
-          owner_id: teamByAt.get(first(r.fields['DRI']) ?? '') ?? null,
-          color: colorFor(name),
-        }
-      })
-      await upsert('epics', rows)
-      epSummary = tally(before, rows)
-      epByAt = await idMap('epics')
-    }
-
-    // ---- Task statuses + Tasks ----
-    const before = await existing('stories')
-    const taskRecs = await fetchAll(T_TASKS, ['Task Name', 'Status', 'Priority Level', 'Estimated hours', 'Associated Epic', 'Task Description', 'DRI'])
-    const names: string[] = [...optionNames]
-    const seen = new Set(optionNames)
-    for (const r of taskRecs) {
-      const s = r.fields['Status'] as string | undefined
-      if (s && !seen.has(s)) { seen.add(s); names.push(s) }
-    }
-    const tsRows = names.map((name, i) => ({
-      workspace_id: W, name, position: i, category: taskCategory(name), color: CAT_COLOR[taskCategory(name)],
-    }))
-    for (let i = 0; i < tsRows.length; i += 200) {
-      const { error } = await db.from('task_statuses').upsert(tsRows.slice(i, i + 200), { onConflict: 'workspace_id,name' })
-      if (error) throw new Error(`upsert task_statuses: ${error.message}`)
-    }
-
-    const stRows = taskRecs.map((r) => {
-      const ep = epByAt.get(first(r.fields['Associated Epic']) ?? '')
-      const hours = r.fields['Estimated hours']
-      return {
-        workspace_id: W, airtable_id: r.id,
-        title: String(r.fields['Task Name'] ?? '(untitled task)'),
-        description: (r.fields['Task Description'] as string) ?? null,
-        status: (r.fields['Status'] as string) ?? null,
-        priority: mapPriority(r.fields['Priority Level']),
-        estimate: typeof hours === 'number' ? Math.round(hours) : null,
-        epic_id: ep?.id ?? null,
-        assignee_id: teamByAt.get(first(r.fields['DRI']) ?? '') ?? null,
-      }
-    })
-    await upsert('stories', stRows)
-
-    await db.from('workspaces').update({ airtable_base_id: baseId, last_sync_at: new Date().toISOString() }).eq('id', W)
-
-    return json({
-      ok: true, ms: Date.now() - started, statuses: names.length,
-      people: teamByAt.size,
-      objectives: objSummary, key_results: krSummary, epics: epSummary,
-      stories: tally(before, stRows),
-    })
+    const summary = await syncWorkspace(db, { token: integ.token, baseId: integ.base_id, workspaceId: W })
+    await db.from('workspace_integrations').update({ last_sync_at: new Date().toISOString(), last_error: null }).eq('workspace_id', W)
+    return json({ ok: true, ...summary })
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : String(e) }, 500)
+    const msg = e instanceof Error ? e.message : String(e)
+    await db.from('workspace_integrations').update({ last_error: msg }).eq('workspace_id', W)
+    return json({ error: msg }, 500)
   }
 })

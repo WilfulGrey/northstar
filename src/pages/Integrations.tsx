@@ -1,54 +1,37 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { PageHeader } from '@/components/Layout'
-import { autoSyncConfig, setAutoSyncConfig, useSyncAirtable, type SyncResult } from '@/lib/api'
-import { useAuth } from '@/auth/AuthProvider'
-
-const BASE_KEY = 'northstar:airtableBaseId'
+import { Spinner } from '@/components/States'
+import { useDisconnectAirtable, useSyncAirtable, useWorkspace, type SyncResult } from '@/lib/api'
+import { timeAgo } from '@/lib/format'
 
 export function Integrations() {
-  const { profile } = useAuth()
-  const ws = profile?.workspace_id ?? null
+  const { data: ws, isLoading } = useWorkspace()
   const sync = useSyncAirtable()
+  const disconnect = useDisconnectAirtable()
   const [token, setToken] = useState('')
-  const [baseId, setBaseId] = useState(() => localStorage.getItem(BASE_KEY) ?? '')
-  const [auto, setAuto] = useState(() => !!autoSyncConfig(ws))
-  const [autoOn, setAutoOn] = useState(() => !!autoSyncConfig(ws))
+  const [baseId, setBaseId] = useState('')
   const [result, setResult] = useState<SyncResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // The workspace id arrives after the profile loads — reflect saved auto-sync state then.
-  useEffect(() => {
-    const has = !!autoSyncConfig(ws)
-    setAuto(has)
-    setAutoOn(has)
-  }, [ws])
+  const connected = !!ws?.airtable_connected
 
-  async function run() {
-    setError(null)
-    setResult(null)
+  async function connect() {
+    setError(null); setResult(null)
     try {
-      const cfg = { token: token.trim(), baseId: baseId.trim() }
-      const res = await sync.mutateAsync(cfg)
-      setResult(res)
-      localStorage.setItem(BASE_KEY, cfg.baseId) // base id is not secret; remember it
-      if (auto && ws) {
-        // Keep this browser auto-syncing — persists the token locally (your own token).
-        setAutoSyncConfig(ws, cfg)
-        setAutoOn(true)
-      }
-      setToken('') // clear the field; the auto-sync copy (if any) lives in localStorage
+      setResult(await sync.mutateAsync({ token: token.trim(), baseId: baseId.trim() }))
+      setToken('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sync failed')
     }
   }
-
-  function disableAuto() {
-    if (ws) setAutoSyncConfig(ws, null)
-    setAuto(false)
-    setAutoOn(false)
+  async function syncNow() {
+    setError(null); setResult(null)
+    try {
+      setResult(await sync.mutateAsync({}))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sync failed')
+    }
   }
-
-  const canSync = token.trim().length > 0 && baseId.trim().length > 0 && !sync.isPending
 
   return (
     <>
@@ -56,81 +39,70 @@ export function Integrations() {
       <div className="flex-1 overflow-y-auto px-7 py-6">
         <div className="mx-auto max-w-2xl space-y-4">
           <div className="card p-5">
-            <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-base">🗂️</span>
-              <div>
-                <h2 className="text-sm font-semibold text-zinc-900">Airtable</h2>
-                <p className="text-xs text-zinc-500">Import Objectives, Key Results, Epics, Tasks and Team.</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-base">🗂️</span>
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-900">Airtable</h2>
+                  <p className="text-xs text-zinc-500">Objectives, Key Results, Epics, Tasks and Team.</p>
+                </div>
               </div>
+              {connected && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Connected
+                </span>
+              )}
             </div>
 
-            <p className="mt-3 text-sm text-zinc-500">
-              Bring your <strong>own</strong> Airtable Personal Access Token and Base ID — the sync pulls into{' '}
-              <em>this</em> workspace only. Tables are matched by name (Objectives, Key Results, Epics, Tasks, Team).
-              Statuses come across 1:1, so a new status in Airtable becomes a new board column. The token is sent over
-              HTTPS to a server-side function and is <strong>not stored on the server</strong> — turn on auto-sync to
-              keep a copy in this browser only.
-            </p>
-
-            <form
-              className="mt-4 space-y-3"
-              onSubmit={(e) => {
-                e.preventDefault()
-                void run()
-              }}
-            >
-              <div>
-                <label className="label">Airtable Personal Access Token</label>
-                <input
-                  aria-label="Airtable token"
-                  type="password"
-                  autoComplete="off"
-                  className="input font-mono"
-                  placeholder="pat…"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                />
+            {isLoading ? (
+              <Spinner />
+            ) : connected ? (
+              <div data-testid="integration-connected" className="mt-4">
+                <p className="text-sm text-zinc-600">
+                  Connected to base <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs">{ws?.airtable_base_id}</code>.
+                  Syncs automatically in the background about every 10 minutes
+                  {ws?.last_sync_at ? ` · last synced ${timeAgo(ws.last_sync_at)}` : ''}.
+                </p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  The token is stored once for the whole workspace, server-side — teammates don't re-enter it.
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <button className="btn btn-primary" onClick={() => void syncNow()} disabled={sync.isPending}>
+                    {sync.isPending ? 'Syncing…' : 'Sync now'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => void disconnect.mutateAsync()} disabled={disconnect.isPending}>
+                    Disconnect
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="label">Base ID</label>
-                <input
-                  aria-label="Airtable base id"
-                  className="input font-mono"
-                  placeholder="app…"
-                  value={baseId}
-                  onChange={(e) => setBaseId(e.target.value)}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2 text-sm text-zinc-600">
-                  <input
-                    type="checkbox"
-                    aria-label="Keep in sync automatically"
-                    className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
-                    checked={auto}
-                    onChange={(e) => setAuto(e.target.checked)}
-                  />
-                  Keep in sync automatically (every 2 min, while open)
-                </label>
-                <button type="submit" className="btn btn-primary" disabled={!canSync}>
-                  {sync.isPending ? 'Syncing…' : 'Sync from Airtable'}
-                </button>
-              </div>
-            </form>
-
-            {autoOn && (
-              <div data-testid="autosync-on" className="mt-3 flex items-center justify-between rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
-                <span>⟳ Auto-sync is on — this browser refreshes every 2 minutes.</span>
-                <button className="btn btn-ghost px-2 text-xs text-indigo-700" onClick={disableAuto}>
-                  Turn off
-                </button>
-              </div>
+            ) : (
+              <form
+                className="mt-4 space-y-3"
+                onSubmit={(e) => { e.preventDefault(); void connect() }}
+              >
+                <p className="text-sm text-zinc-500">
+                  Connect with an Airtable Personal Access Token and Base ID. It's stored <strong>once for this
+                  workspace</strong> (server-side, encrypted at rest) so the whole team benefits and the background
+                  job keeps data fresh — no one has to keep the app open. Tables are matched by name.
+                </p>
+                <div>
+                  <label className="label">Airtable Personal Access Token</label>
+                  <input aria-label="Airtable token" type="password" autoComplete="off" className="input font-mono" placeholder="pat…" value={token} onChange={(e) => setToken(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Base ID</label>
+                  <input aria-label="Airtable base id" className="input font-mono" placeholder="app…" value={baseId} onChange={(e) => setBaseId(e.target.value)} />
+                </div>
+                <div className="flex justify-end">
+                  <button type="submit" className="btn btn-primary" disabled={!token.trim() || !baseId.trim() || sync.isPending}>
+                    {sync.isPending ? 'Connecting…' : 'Connect & sync from Airtable'}
+                  </button>
+                </div>
+              </form>
             )}
 
             {error && (
-              <p role="alert" className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
+              <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
 
             {result && (
@@ -144,18 +116,12 @@ export function Integrations() {
                   <Tile label="Epics" r={result.epics} />
                   <Tile label="Stories" r={result.stories} />
                 </div>
-                {result.key_results.skipped > 0 && (
-                  <p className="mt-2 text-xs text-zinc-500">
-                    {result.key_results.skipped} key results skipped (no linked objective).
-                  </p>
-                )}
               </div>
             )}
           </div>
 
           <p className="px-1 text-xs text-zinc-400">
-            More connectors (Linear, Jira, GitHub) would slot in here the same way — a server-side function and an
-            upsert keyed by an external id.
+            Sync is one-way (Airtable → Northstar), upserting by record id. More connectors would slot in the same way.
           </p>
         </div>
       </div>
@@ -168,9 +134,7 @@ function Tile({ label, r }: { label: string; r: { created: number; updated: numb
     <div className="rounded-lg bg-white p-3 ring-1 ring-zinc-100">
       <p className="text-xs font-medium text-zinc-500">{label}</p>
       <p className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-900">{r.total}</p>
-      <p className="text-[11px] text-zinc-400">
-        {r.created} new · {r.updated} updated
-      </p>
+      <p className="text-[11px] text-zinc-400">{r.created} new · {r.updated} updated</p>
     </div>
   )
 }

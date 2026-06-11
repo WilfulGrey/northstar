@@ -24,6 +24,7 @@ export const keys = {
   epics: ['epics'] as const,
   stories: ['stories'] as const,
   taskStatuses: ['task_statuses'] as const,
+  workspace: ['workspace'] as const,
   comments: (storyId: string) => ['comments', storyId] as const,
   activity: (storyId: string) => ['activity', storyId] as const,
   checkins: (krId: string) => ['checkins', krId] as const,
@@ -320,11 +321,12 @@ export interface SyncResult {
   epics: { created: number; updated: number; total: number }
   stories: { created: number; updated: number; total: number }
 }
+// Pass { token, baseId } to connect; pass nothing to sync with the stored token.
 export function useSyncAirtable() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (input: { token: string; baseId: string }): Promise<SyncResult> => {
-      const { data, error } = await supabase.functions.invoke('sync-airtable', { body: input })
+    mutationFn: async (input?: { token?: string; baseId?: string }): Promise<SyncResult> => {
+      const { data, error } = await supabase.functions.invoke('sync-airtable', { body: input ?? {} })
       if (error) {
         let message = error.message
         try {
@@ -338,59 +340,39 @@ export function useSyncAirtable() {
       return data as SyncResult
     },
     onSuccess: () => {
-      for (const k of [keys.objectives, keys.epics, keys.stories, keys.taskStatuses]) {
+      for (const k of [keys.objectives, keys.epics, keys.stories, keys.taskStatuses, keys.workspace]) {
         qc.invalidateQueries({ queryKey: k })
       }
     },
   })
 }
 
-// ---------------- Auto-sync (client-side polling) ----------------
-// Near-realtime while the app is open: re-runs the Airtable sync on an interval
-// using credentials the user opted to keep in this browser (their own token).
-const AUTOSYNC_MS = 120_000
-export const AUTOSYNC_EVENT = 'northstar:autosync'
-type AutoCfg = { token: string; baseId: string }
-
-export function autoSyncConfig(workspaceId?: string | null): AutoCfg | null {
-  if (!workspaceId) return null
-  try {
-    const v = localStorage.getItem(`northstar:autosync:${workspaceId}`)
-    return v ? (JSON.parse(v) as AutoCfg) : null
-  } catch {
-    return null
-  }
-}
-export function setAutoSyncConfig(workspaceId: string, cfg: AutoCfg | null) {
-  const key = `northstar:autosync:${workspaceId}`
-  if (cfg) localStorage.setItem(key, JSON.stringify(cfg))
-  else localStorage.removeItem(key)
-  window.dispatchEvent(new Event(AUTOSYNC_EVENT))
+export function useDisconnectAirtable() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.functions.invoke('disconnect-airtable', { body: {} })
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.workspace }),
+  })
 }
 
-/** Mounted once in the app shell; polls Airtable for the current workspace. */
-export function useAutoSync(workspaceId?: string | null) {
-  const sync = useSyncAirtable()
-  useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setInterval> | undefined
-    const start = () => {
-      if (timer) clearInterval(timer)
-      const cfg = autoSyncConfig(workspaceId)
-      if (!cfg) return
-      const run = () => { if (!cancelled) sync.mutate(cfg) }
-      run() // refresh immediately on load / when toggled on
-      timer = setInterval(run, AUTOSYNC_MS)
-    }
-    start()
-    window.addEventListener(AUTOSYNC_EVENT, start)
-    return () => {
-      cancelled = true
-      if (timer) clearInterval(timer)
-      window.removeEventListener(AUTOSYNC_EVENT, start)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId])
+export interface WorkspaceStatus {
+  id: string
+  name: string
+  airtable_connected: boolean
+  airtable_base_id: string | null
+  last_sync_at: string | null
+}
+export function useWorkspace() {
+  return useQuery({
+    queryKey: keys.workspace,
+    queryFn: async () =>
+      throwOnError<WorkspaceStatus | null>(
+        await supabase.from('workspaces').select('id,name,airtable_connected,airtable_base_id,last_sync_at').maybeSingle(),
+      ),
+  })
 }
 
 // KR check-ins — records history AND advances the key result's current value.

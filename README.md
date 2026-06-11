@@ -94,12 +94,41 @@ results, 71 epics, 1220 tasks in ~5s.**
 - **`profiles` became "people in a workspace."** Some are linked to an auth user (they can
   log in), others are synced Airtable **Team** members used as assignees — so the connector
   now brings people across, and tasks land on the right owner.
-- **Bring-your-own Airtable.** The sync takes *your* token + base id from the Integrations
-  form (never a shared secret, never stored) and pulls into *your* workspace. The demo can't
-  reach anyone else's base.
+- **Bring-your-own Airtable.** Connect with *your* token + base id; the sync pulls into
+  *your* workspace. The demo can't reach anyone else's base.
 - **Statuses are purely the source's.** No imposed defaults — the Mamamia board's columns
   are exactly Airtable's Status options.
 - **List view.** The board has a Board ⇄ List toggle for a dense, sortable table of tasks.
+
+## What's new in v1.7 — server-side connection + background sync
+
+- **One connection per workspace, stored server-side.** Connect Airtable once (admin enters
+  the token); it's saved in `workspace_integrations`, a table with RLS **enabled and no
+  policies** — only the service role (the Edge Functions / scheduler) can read it, never the
+  browser, never teammates. Everyone shares the one connection; nobody re-enters a token.
+- **Background sync, even when nobody's online.** `pg_cron` runs every ~10 minutes →
+  `pg_net` calls the `sync-cron` Edge Function (no JWT, guarded by `x-sync-secret`) → it
+  syncs every connected workspace using its stored token. "Sync now" on the Integrations
+  page triggers the same core on demand.
+- One-way (Airtable → Northstar), upsert by `(workspace_id, airtable_id)` — adds/updates,
+  doesn't delete. Edge Functions: `sync-airtable` (connect + manual), `sync-cron`
+  (scheduled), `disconnect-airtable`; shared core in `supabase/functions/_shared/sync.ts`.
+
+### Background sync setup
+
+`pg_cron` + `pg_net` are enabled by migration. Schedule the job once (Supabase SQL editor),
+keeping the secret out of source control — it must match the function's `SYNC_SECRET`:
+
+```sql
+select cron.schedule('airtable-autosync', '*/10 * * * *', $$
+  select net.http_post(
+    url := 'https://<project-ref>.supabase.co/functions/v1/sync-cron',
+    headers := jsonb_build_object('content-type','application/json','x-sync-secret','<SYNC_SECRET>'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 120000   -- a full sync takes longer than pg_net's 5s default
+  );
+$$);
+```
 
 ## Product decisions (and what I deliberately left out)
 

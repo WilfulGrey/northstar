@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthProvider'
 import { Avatar } from './Avatar'
 import { CommandPalette, CMDK_EVENT } from './CommandPalette'
-import { useAutoSync, useRealtimeSync } from '@/lib/api'
+import { useRealtimeSync } from '@/lib/api'
 import { displayName } from '@/lib/format'
 
 const NAV = [
@@ -19,7 +19,6 @@ const NAV = [
 export function Layout() {
   const { profile, user, signOut } = useAuth()
   useRealtimeSync()
-  useAutoSync(profile?.workspace_id)
 
   return (
     <div className="flex h-full">

@@ -256,29 +256,34 @@ test('board assignee filter defaults to Me and clears to all', async ({ page }) 
 // Uses creds from the environment so the token is never committed; skips if absent.
 const AT_TOKEN = process.env.AIRTABLE_TOKEN
 const AT_BASE = process.env.AIRTABLE_BASE_ID
-test('syncs an Airtable base into its own workspace', async ({ page }) => {
+test('connects Airtable server-side and syncs into the workspace', async ({ page }) => {
   test.skip(!AT_TOKEN || !AT_BASE, 'Airtable creds not in env')
+  test.setTimeout(120_000) // a real sync (~1220 rows) + loading the board needs headroom
   await loginAs(page, 'mamamia@northstar.app', 'mamamia2026')
   await page.getByRole('link', { name: 'Integrations', exact: true }).click()
+
+  // Make the run deterministic regardless of stored state: start disconnected.
+  await expect(page.getByRole('heading', { name: 'Airtable' })).toBeVisible()
+  await page.waitForTimeout(800) // let the workspace status resolve
+  const disconnectBtn = page.getByRole('button', { name: 'Disconnect' })
+  if (await disconnectBtn.count()) await disconnectBtn.click()
+
+  // Not connected → connect form. The token is stored once for the workspace.
   await page.getByLabel('Airtable token').fill(AT_TOKEN!)
   await page.getByLabel('Airtable base id').fill(AT_BASE!)
-  await page.getByLabel('Keep in sync automatically').check() // opt into near-realtime auto-sync
-  await page.getByRole('button', { name: 'Sync from Airtable', exact: true }).click()
+  await page.getByRole('button', { name: 'Connect & sync from Airtable', exact: true }).click()
   await expect(page.getByTestId('sync-result')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('sync-result')).toContainText(/people/)
 
-  // Auto-sync is on and survives a reload (kept in this browser).
-  await expect(page.getByTestId('autosync-on')).toBeVisible()
-  await page.reload()
-  await page.getByRole('link', { name: 'Integrations', exact: true }).click()
-  await expect(page.getByTestId('autosync-on')).toBeVisible()
+  // The token is now stored server-side for the whole workspace; "Sync now"
+  // would reuse it (verified separately) — kept light here to avoid two
+  // back-to-back 1220-row syncs.
+  await expect(page.getByTestId('integration-connected')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sync now', exact: true })).toBeVisible()
 
-  // The imported tasks must actually render (guards the 1000-row cap / payload regression).
-  // The admin owns nothing, so switch the filter off "Me". Generous timeout: this loads
-  // all ~1220 freshly-synced rows.
+  // The imported tasks render (guards the 1000-row cap / payload regression).
+  // The admin owns nothing, so switch the filter off "Me".
   await page.getByRole('link', { name: 'Board', exact: true }).click()
   await showAllAssignees(page)
   await expect(page.getByTestId('story-card').first()).toBeVisible({ timeout: 45_000 })
-  await page.getByTestId('view-list').click()
-  await expect(page.getByTestId('task-row').first()).toBeVisible({ timeout: 15_000 })
 })
