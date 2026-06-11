@@ -6,8 +6,9 @@ import { PriorityIcon } from '@/components/Badges'
 import { ErrorState, Spinner } from '@/components/States'
 import { StoryModal } from '@/modals/StoryModal'
 import { StoryDetail } from '@/components/StoryDetail'
-import { useEpics, useStories, useTaskStatuses, useUpdateStory } from '@/lib/api'
-import { humanizeStatus } from '@/lib/format'
+import { useEpics, useProfiles, useStories, useTaskStatuses, useUpdateStory } from '@/lib/api'
+import { useAuth } from '@/auth/AuthProvider'
+import { displayName, humanizeStatus } from '@/lib/format'
 import type { StoryFull, TaskStatus } from '@/lib/types'
 
 const NONE = '__none'
@@ -18,9 +19,15 @@ export function Board() {
   const { data: stories, isLoading, error } = useStories()
   const { data: epics = [] } = useEpics()
   const { data: statuses = [] } = useTaskStatuses()
+  const { data: people = [] } = useProfiles()
+  const { profile } = useAuth()
   const update = useUpdateStory()
 
   const [epicFilter, setEpicFilter] = useState('')
+  // undefined = "not touched" → defaults to the current user ("Me"); '' = everyone.
+  const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>(undefined)
+  const me = profile?.id ?? ''
+  const assignee = assigneeFilter === undefined ? me : assigneeFilter
   const [view, setView] = useState<'board' | 'list'>('board')
   const [creating, setCreating] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -53,8 +60,11 @@ export function Board() {
 
   const known = useMemo(() => new Set(statuses.map((s) => s.name)), [statuses])
   const filtered = useMemo(
-    () => (stories ?? []).filter((s) => (epicFilter ? s.epic_id === epicFilter : true)),
-    [stories, epicFilter],
+    () =>
+      (stories ?? []).filter(
+        (s) => (epicFilter ? s.epic_id === epicFilter : true) && (assignee ? s.assignee_id === assignee : true),
+      ),
+    [stories, epicFilter, assignee],
   )
   const byStatus = useMemo(() => {
     const map = new Map<string, StoryFull[]>()
@@ -103,7 +113,33 @@ export function Board() {
                 List
               </button>
             </div>
-            <select className="input h-8 w-44 py-1 text-sm" value={epicFilter} onChange={(e) => setEpicFilter(e.target.value)}>
+            <div className="flex items-center">
+              <select
+                aria-label="Filter by assignee"
+                className="input h-8 w-40 py-1 text-sm"
+                value={assignee}
+                onChange={(e) => setAssigneeFilter(e.target.value)}
+              >
+                <option value="">All assignees</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.id === me ? `Me · ${displayName(p)}` : displayName(p)}
+                  </option>
+                ))}
+              </select>
+              {assignee && (
+                <button
+                  type="button"
+                  title="Clear assignee filter"
+                  aria-label="Clear assignee filter"
+                  onClick={() => setAssigneeFilter('')}
+                  className="btn btn-ghost px-1.5"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <select className="input h-8 w-40 py-1 text-sm" value={epicFilter} onChange={(e) => setEpicFilter(e.target.value)}>
               <option value="">All epics</option>
               {epics.map((e) => (
                 <option key={e.id} value={e.id}>{e.title}</option>
@@ -120,6 +156,19 @@ export function Board() {
           <Spinner />
         ) : error ? (
           <ErrorState error={error} />
+        ) : filtered.length === 0 && (stories?.length ?? 0) > 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-zinc-400">
+            <p>No tasks match the current filter.</p>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setAssigneeFilter('')
+                setEpicFilter('')
+              }}
+            >
+              Show all tasks
+            </button>
+          </div>
         ) : view === 'list' ? (
           <TasksList stories={filtered} statuses={statuses} onOpen={setOpenId} />
         ) : (

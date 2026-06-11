@@ -20,6 +20,11 @@ function uniq(prefix: string) {
   return `${prefix} ${Date.now().toString().slice(-6)}`
 }
 
+// The board defaults its assignee filter to "Me"; reset to everyone.
+async function showAllAssignees(page: Page) {
+  await page.getByLabel('Filter by assignee').selectOption('')
+}
+
 test('signs in and shows the alignment dashboard with seeded data', async ({ page }) => {
   await login(page)
 
@@ -86,6 +91,7 @@ test('creates an epic linked to an objective (alignment bridge)', async ({ page 
 test('creates a story and moves it across the board', async ({ page }) => {
   await login(page)
   await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await showAllAssignees(page) // the new story is unassigned
 
   const storyTitle = uniq('E2E story')
   await page.getByTitle('New story in Backlog').click()
@@ -198,6 +204,7 @@ test('invites a teammate through the edge function', async ({ page }) => {
 test('a story opens from a shareable deep link', async ({ page }) => {
   await login(page)
   await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await showAllAssignees(page) // "Add Sentry" is assigned to Leo, not the demo user
 
   // Discover the NS ref by opening the card, then reload via its deep link.
   await page.locator('[data-story-title="Add Sentry error tracking"]').click()
@@ -226,8 +233,22 @@ test('lists unaligned in-flight work on the dashboard', async ({ page }) => {
 test('board can switch to a list view of tasks', async ({ page }) => {
   await login(page)
   await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await showAllAssignees(page)
   await page.getByTestId('view-list').click()
   await expect(page.getByTestId('task-row').first()).toBeVisible()
+  await expect(page.getByText('Add Sentry error tracking')).toBeVisible()
+})
+
+test('board assignee filter defaults to Me and clears to all', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+
+  // Default = Me (demo): demo's task shows, Leo's does not.
+  await expect(page.getByText('Postmortem template & on-call rota')).toBeVisible()
+  await expect(page.getByText('Add Sentry error tracking')).toHaveCount(0)
+
+  // Clearing the filter reveals everyone's tasks.
+  await page.getByRole('button', { name: 'Clear assignee filter' }).click()
   await expect(page.getByText('Add Sentry error tracking')).toBeVisible()
 })
 
@@ -241,13 +262,23 @@ test('syncs an Airtable base into its own workspace', async ({ page }) => {
   await page.getByRole('link', { name: 'Integrations', exact: true }).click()
   await page.getByLabel('Airtable token').fill(AT_TOKEN!)
   await page.getByLabel('Airtable base id').fill(AT_BASE!)
+  await page.getByLabel('Keep in sync automatically').check() // opt into near-realtime auto-sync
   await page.getByRole('button', { name: 'Sync from Airtable', exact: true }).click()
   await expect(page.getByTestId('sync-result')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('sync-result')).toContainText(/people/)
 
+  // Auto-sync is on and survives a reload (kept in this browser).
+  await expect(page.getByTestId('autosync-on')).toBeVisible()
+  await page.reload()
+  await page.getByRole('link', { name: 'Integrations', exact: true }).click()
+  await expect(page.getByTestId('autosync-on')).toBeVisible()
+
   // The imported tasks must actually render (guards the 1000-row cap / payload regression).
+  // The admin owns nothing, so switch the filter off "Me". Generous timeout: this loads
+  // all ~1220 freshly-synced rows.
   await page.getByRole('link', { name: 'Board', exact: true }).click()
-  await expect(page.getByTestId('story-card').first()).toBeVisible({ timeout: 20_000 })
+  await showAllAssignees(page)
+  await expect(page.getByTestId('story-card').first()).toBeVisible({ timeout: 45_000 })
   await page.getByTestId('view-list').click()
-  await expect(page.getByTestId('task-row').first()).toBeVisible()
+  await expect(page.getByTestId('task-row').first()).toBeVisible({ timeout: 15_000 })
 })

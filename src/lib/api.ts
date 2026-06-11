@@ -345,6 +345,54 @@ export function useSyncAirtable() {
   })
 }
 
+// ---------------- Auto-sync (client-side polling) ----------------
+// Near-realtime while the app is open: re-runs the Airtable sync on an interval
+// using credentials the user opted to keep in this browser (their own token).
+const AUTOSYNC_MS = 120_000
+export const AUTOSYNC_EVENT = 'northstar:autosync'
+type AutoCfg = { token: string; baseId: string }
+
+export function autoSyncConfig(workspaceId?: string | null): AutoCfg | null {
+  if (!workspaceId) return null
+  try {
+    const v = localStorage.getItem(`northstar:autosync:${workspaceId}`)
+    return v ? (JSON.parse(v) as AutoCfg) : null
+  } catch {
+    return null
+  }
+}
+export function setAutoSyncConfig(workspaceId: string, cfg: AutoCfg | null) {
+  const key = `northstar:autosync:${workspaceId}`
+  if (cfg) localStorage.setItem(key, JSON.stringify(cfg))
+  else localStorage.removeItem(key)
+  window.dispatchEvent(new Event(AUTOSYNC_EVENT))
+}
+
+/** Mounted once in the app shell; polls Airtable for the current workspace. */
+export function useAutoSync(workspaceId?: string | null) {
+  const sync = useSyncAirtable()
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setInterval> | undefined
+    const start = () => {
+      if (timer) clearInterval(timer)
+      const cfg = autoSyncConfig(workspaceId)
+      if (!cfg) return
+      const run = () => { if (!cancelled) sync.mutate(cfg) }
+      run() // refresh immediately on load / when toggled on
+      timer = setInterval(run, AUTOSYNC_MS)
+    }
+    start()
+    window.addEventListener(AUTOSYNC_EVENT, start)
+    return () => {
+      cancelled = true
+      if (timer) clearInterval(timer)
+      window.removeEventListener(AUTOSYNC_EVENT, start)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId])
+}
+
 // KR check-ins — records history AND advances the key result's current value.
 export function useAddCheckin(keyResultId: string) {
   const qc = useQueryClient()

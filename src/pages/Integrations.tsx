@@ -1,27 +1,51 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '@/components/Layout'
-import { useSyncAirtable, type SyncResult } from '@/lib/api'
+import { autoSyncConfig, setAutoSyncConfig, useSyncAirtable, type SyncResult } from '@/lib/api'
+import { useAuth } from '@/auth/AuthProvider'
 
 const BASE_KEY = 'northstar:airtableBaseId'
 
 export function Integrations() {
+  const { profile } = useAuth()
+  const ws = profile?.workspace_id ?? null
   const sync = useSyncAirtable()
   const [token, setToken] = useState('')
   const [baseId, setBaseId] = useState(() => localStorage.getItem(BASE_KEY) ?? '')
+  const [auto, setAuto] = useState(() => !!autoSyncConfig(ws))
+  const [autoOn, setAutoOn] = useState(() => !!autoSyncConfig(ws))
   const [result, setResult] = useState<SyncResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // The workspace id arrives after the profile loads — reflect saved auto-sync state then.
+  useEffect(() => {
+    const has = !!autoSyncConfig(ws)
+    setAuto(has)
+    setAutoOn(has)
+  }, [ws])
 
   async function run() {
     setError(null)
     setResult(null)
     try {
-      const res = await sync.mutateAsync({ token: token.trim(), baseId: baseId.trim() })
+      const cfg = { token: token.trim(), baseId: baseId.trim() }
+      const res = await sync.mutateAsync(cfg)
       setResult(res)
-      localStorage.setItem(BASE_KEY, baseId.trim()) // base id is not secret; remember it
-      setToken('') // never keep the token around
+      localStorage.setItem(BASE_KEY, cfg.baseId) // base id is not secret; remember it
+      if (auto && ws) {
+        // Keep this browser auto-syncing — persists the token locally (your own token).
+        setAutoSyncConfig(ws, cfg)
+        setAutoOn(true)
+      }
+      setToken('') // clear the field; the auto-sync copy (if any) lives in localStorage
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sync failed')
     }
+  }
+
+  function disableAuto() {
+    if (ws) setAutoSyncConfig(ws, null)
+    setAuto(false)
+    setAutoOn(false)
   }
 
   const canSync = token.trim().length > 0 && baseId.trim().length > 0 && !sync.isPending
@@ -44,7 +68,8 @@ export function Integrations() {
               Bring your <strong>own</strong> Airtable Personal Access Token and Base ID — the sync pulls into{' '}
               <em>this</em> workspace only. Tables are matched by name (Objectives, Key Results, Epics, Tasks, Team).
               Statuses come across 1:1, so a new status in Airtable becomes a new board column. The token is sent over
-              HTTPS to a server-side function and is <strong>never stored</strong>.
+              HTTPS to a server-side function and is <strong>not stored on the server</strong> — turn on auto-sync to
+              keep a copy in this browser only.
             </p>
 
             <form
@@ -76,12 +101,31 @@ export function Integrations() {
                   onChange={(e) => setBaseId(e.target.value)}
                 />
               </div>
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-sm text-zinc-600">
+                  <input
+                    type="checkbox"
+                    aria-label="Keep in sync automatically"
+                    className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                    checked={auto}
+                    onChange={(e) => setAuto(e.target.checked)}
+                  />
+                  Keep in sync automatically (every 2 min, while open)
+                </label>
                 <button type="submit" className="btn btn-primary" disabled={!canSync}>
                   {sync.isPending ? 'Syncing…' : 'Sync from Airtable'}
                 </button>
               </div>
             </form>
+
+            {autoOn && (
+              <div data-testid="autosync-on" className="mt-3 flex items-center justify-between rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+                <span>⟳ Auto-sync is on — this browser refreshes every 2 minutes.</span>
+                <button className="btn btn-ghost px-2 text-xs text-indigo-700" onClick={disableAuto}>
+                  Turn off
+                </button>
+              </div>
+            )}
 
             {error && (
               <p role="alert" className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
