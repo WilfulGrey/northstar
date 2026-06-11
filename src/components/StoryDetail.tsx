@@ -201,7 +201,7 @@ function Timeline({
   const { data: comments = [], isLoading: lc } = useComments(storyId)
   const { data: activity = [], isLoading: la } = useActivity(storyId)
   const del = useDeleteComment(storyId)
-  const { user } = useAuth()
+  const { profile } = useAuth()
 
   type Item =
     | { kind: 'comment'; at: string; data: Comment }
@@ -229,7 +229,7 @@ function Timeline({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-zinc-800">{displayName(it.data.author)}</span>
                     <span className="text-xs text-zinc-400">{timeAgo(it.data.created_at)}</span>
-                    {user?.id === it.data.author_id && (
+                    {profile?.id === it.data.author_id && (
                       <button className="ml-auto text-xs text-zinc-400 hover:text-red-600" onClick={() => del.mutate(it.data.id)}>
                         delete
                       </button>
@@ -253,14 +253,14 @@ function Timeline({
 }
 
 function Composer({ storyId }: { storyId: string }) {
-  const { user, profile } = useAuth()
+  const { profile } = useAuth()
   const add = useAddComment(storyId)
   const [body, setBody] = useState('')
 
   async function submit() {
     const text = body.trim()
-    if (!text || !user) return
-    await add.mutateAsync({ body: text, author_id: user.id })
+    if (!text || !profile) return
+    await add.mutateAsync({ body: text, author_id: profile.id })
     setBody('')
   }
 

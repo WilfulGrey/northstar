@@ -82,8 +82,24 @@ becomes a new column on the next sync — no code change. A semantic `category` 
 have 16 columns while "done" and "in flight" keep their meaning.
 
 The Airtable token never touches the browser — the sync is a second **Edge Function**
-(`supabase/functions/sync-airtable`, `verify_jwt` on) that holds the token as a Supabase
-secret. Real run: **3 objectives, 10 key results, 71 epics, 1220 tasks in ~5s.**
+(`supabase/functions/sync-airtable`, `verify_jwt` on). Real run: **3 objectives, 10 key
+results, 71 epics, 1220 tasks in ~5s.**
+
+## What's new in v1.5 — workspaces + bring-your-own connector
+
+- **Multi-tenant workspaces.** Every account belongs to a workspace and all data is scoped
+  to it by RLS (`workspace_id = current_workspace()`, with that column defaulting to the
+  caller's workspace so inserts "just work"). The **demo** workspace is the curated
+  showcase; a fresh **Mamamia** workspace starts empty and is filled only by the connector.
+- **`profiles` became "people in a workspace."** Some are linked to an auth user (they can
+  log in), others are synced Airtable **Team** members used as assignees — so the connector
+  now brings people across, and tasks land on the right owner.
+- **Bring-your-own Airtable.** The sync takes *your* token + base id from the Integrations
+  form (never a shared secret, never stored) and pulls into *your* workspace. The demo can't
+  reach anyone else's base.
+- **Statuses are purely the source's.** No imposed defaults — the Mamamia board's columns
+  are exactly Airtable's Status options.
+- **List view.** The board has a Board ⇄ List toggle for a dense, sortable table of tasks.
 
 ## Product decisions (and what I deliberately left out)
 
@@ -156,10 +172,13 @@ by the `/* → /index.html` rewrite. Every push to `main` triggers a deploy.
 ## Demo
 
 ```
-demo@northstar.app / northstar2026
+demo@northstar.app    / northstar2026   # curated showcase workspace
+mamamia@northstar.app / mamamia2026      # empty — fill it via Integrations → Sync from Airtable
 ```
 
-The login screen has a **“Try the demo workspace”** button that signs you straight in.
+The login screen has a **“Try the demo workspace”** button that signs you straight in as the
+demo user. The Mamamia account starts empty; paste an Airtable token + base id on the
+Integrations page to populate it.
 
 ## Project layout
 

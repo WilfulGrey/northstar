@@ -8,6 +8,14 @@ async function login(page: Page) {
   await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible()
 }
 
+async function loginAs(page: Page, email: string, password: string) {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible()
+}
+
 function uniq(prefix: string) {
   return `${prefix} ${Date.now().toString().slice(-6)}`
 }
@@ -215,11 +223,25 @@ test('lists unaligned in-flight work on the dashboard', async ({ page }) => {
   await expect(page.getByTestId('alignment-pct')).toHaveText(/%$/)
 })
 
-// Runs LAST: it imports the full Airtable base, so it shouldn't precede other tests.
-test('syncs the Airtable base through the edge function', async ({ page }) => {
+test('board can switch to a list view of tasks', async ({ page }) => {
   await login(page)
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await page.getByTestId('view-list').click()
+  await expect(page.getByTestId('task-row').first()).toBeVisible()
+  await expect(page.getByText('Add Sentry error tracking')).toBeVisible()
+})
+
+// Runs LAST: imports the full Airtable base into the (separate) mamamia workspace.
+// Uses creds from the environment so the token is never committed; skips if absent.
+const AT_TOKEN = process.env.AIRTABLE_TOKEN
+const AT_BASE = process.env.AIRTABLE_BASE_ID
+test('syncs an Airtable base into its own workspace', async ({ page }) => {
+  test.skip(!AT_TOKEN || !AT_BASE, 'Airtable creds not in env')
+  await loginAs(page, 'mamamia@northstar.app', 'mamamia2026')
   await page.getByRole('link', { name: 'Integrations', exact: true }).click()
+  await page.getByLabel('Airtable token').fill(AT_TOKEN!)
+  await page.getByLabel('Airtable base id').fill(AT_BASE!)
   await page.getByRole('button', { name: 'Sync from Airtable', exact: true }).click()
   await expect(page.getByTestId('sync-result')).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByTestId('sync-result')).toContainText(/statuses/)
+  await expect(page.getByTestId('sync-result')).toContainText(/people/)
 })

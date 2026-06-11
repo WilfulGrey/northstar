@@ -23,6 +23,9 @@ export interface Profile {
   email: string | null
   full_name: string | null
   avatar_color: string
+  workspace_id?: string | null
+  auth_user_id?: string | null
+  airtable_id?: string | null
   created_at: string
 }
 

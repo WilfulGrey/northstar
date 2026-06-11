@@ -8,7 +8,7 @@ import { StoryModal } from '@/modals/StoryModal'
 import { StoryDetail } from '@/components/StoryDetail'
 import { useEpics, useStories, useTaskStatuses, useUpdateStory } from '@/lib/api'
 import { humanizeStatus } from '@/lib/format'
-import type { StoryFull } from '@/lib/types'
+import type { StoryFull, TaskStatus } from '@/lib/types'
 
 const NONE = '__none'
 const CAP = 50 // keep the board responsive even after syncing 1000+ tasks
@@ -21,6 +21,7 @@ export function Board() {
   const update = useUpdateStory()
 
   const [epicFilter, setEpicFilter] = useState('')
+  const [view, setView] = useState<'board' | 'list'>('board')
   const [creating, setCreating] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
@@ -86,6 +87,22 @@ export function Board() {
         subtitle="Every story, by status. Columns come from your statuses — drag to move, click to open."
         action={
           <div className="flex items-center gap-2">
+            <div className="flex rounded-md border border-zinc-200 p-0.5">
+              <button
+                data-testid="view-board"
+                onClick={() => setView('board')}
+                className={`rounded px-2.5 py-1 text-sm ${view === 'board' ? 'bg-zinc-100 font-medium text-zinc-800' : 'text-zinc-500 hover:text-zinc-700'}`}
+              >
+                Board
+              </button>
+              <button
+                data-testid="view-list"
+                onClick={() => setView('list')}
+                className={`rounded px-2.5 py-1 text-sm ${view === 'list' ? 'bg-zinc-100 font-medium text-zinc-800' : 'text-zinc-500 hover:text-zinc-700'}`}
+              >
+                List
+              </button>
+            </div>
             <select className="input h-8 w-44 py-1 text-sm" value={epicFilter} onChange={(e) => setEpicFilter(e.target.value)}>
               <option value="">All epics</option>
               {epics.map((e) => (
@@ -103,6 +120,8 @@ export function Board() {
           <Spinner />
         ) : error ? (
           <ErrorState error={error} />
+        ) : view === 'list' ? (
+          <TasksList stories={filtered} statuses={statuses} onOpen={setOpenId} />
         ) : (
           <div className="scroll-thin flex h-full gap-3 overflow-x-auto px-7 py-5">
             {columns.map((col) => {
@@ -205,6 +224,70 @@ function StoryCard({
           )}
           <Avatar profile={story.assignee} size={20} />
         </div>
+      </div>
+    </div>
+  )
+}
+
+function TasksList({
+  stories,
+  statuses,
+  onOpen,
+}: {
+  stories: StoryFull[]
+  statuses: TaskStatus[]
+  onOpen: (id: string) => void
+}) {
+  const pos = new Map(statuses.map((s) => [s.name, s.position]))
+  const color = new Map(statuses.map((s) => [s.name, s.color]))
+  const sorted = [...stories].sort((a, b) => {
+    const pa = a.status ? pos.get(a.status) ?? 999 : 1000
+    const pb = b.status ? pos.get(b.status) ?? 999 : 1000
+    return pa - pb || a.ref - b.ref
+  })
+
+  return (
+    <div className="h-full overflow-y-auto px-7 py-5">
+      <div className="mx-auto max-w-5xl overflow-hidden rounded-xl border border-zinc-200 bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-zinc-100 text-left text-xs font-medium text-zinc-500">
+              <th className="px-4 py-2.5 font-medium">Status</th>
+              <th className="px-2 py-2.5 font-medium">Task</th>
+              <th className="px-2 py-2.5 font-medium">Epic</th>
+              <th className="px-2 py-2.5 text-center font-medium">Pri</th>
+              <th className="px-2 py-2.5 text-center font-medium">Est</th>
+              <th className="px-4 py-2.5 font-medium">Assignee</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((s) => (
+              <tr
+                key={s.id}
+                data-testid="task-row"
+                data-story-title={s.title}
+                onClick={() => onOpen(s.id)}
+                className="cursor-pointer border-b border-zinc-50 last:border-0 hover:bg-zinc-50"
+              >
+                <td className="whitespace-nowrap px-4 py-2.5">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: (s.status ? color.get(s.status) : null) ?? '#d4d4d8' }} />
+                    {humanizeStatus(s.status)}
+                  </span>
+                </td>
+                <td className="px-2 py-2.5">
+                  <span className="font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>{' '}
+                  <span className="text-zinc-800">{s.title}</span>
+                </td>
+                <td className="max-w-[180px] truncate px-2 py-2.5 text-xs text-zinc-500">{s.epic?.title ?? '—'}</td>
+                <td className="px-2 py-2.5 text-center"><PriorityIcon priority={s.priority} /></td>
+                <td className="px-2 py-2.5 text-center text-xs text-zinc-500">{s.estimate ?? ''}</td>
+                <td className="px-4 py-2.5"><Avatar profile={s.assignee} size={22} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {sorted.length === 0 && <p className="px-4 py-8 text-center text-sm text-zinc-400">No tasks.</p>}
       </div>
     </div>
   )

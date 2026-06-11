@@ -90,7 +90,7 @@ export function KeyResultDetail({ keyResult, onClose }: { keyResult: KeyResult; 
 }
 
 function CheckinSection({ kr }: { kr: KeyResult }) {
-  const { user } = useAuth()
+  const { profile } = useAuth()
   const { data: checkins = [] } = useKrCheckins(kr.id)
   const add = useAddCheckin(kr.id)
   const [value, setValue] = useState(String(kr.current_value))
@@ -99,8 +99,8 @@ function CheckinSection({ kr }: { kr: KeyResult }) {
   const trend = useMemo(() => [...checkins].reverse().map((c) => c.value), [checkins])
 
   async function submit() {
-    if (!user || value === '') return
-    await add.mutateAsync({ value: Number(value), confidence, note: note.trim() || null, author_id: user.id })
+    if (!profile || value === '') return
+    await add.mutateAsync({ value: Number(value), confidence, note: note.trim() || null, author_id: profile.id })
     setNote('')
   }
 

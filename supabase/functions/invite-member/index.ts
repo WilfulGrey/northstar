@@ -56,39 +56,50 @@ Deno.serve(async (req) => {
   const admin = createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } })
   const color = COLORS[[...email].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length]
 
-  // 3. Idempotent provisioning.
+  // The invite lands in the caller's workspace.
+  const { data: me } = await admin.from('profiles').select('workspace_id').eq('auth_user_id', user.id).maybeSingle()
+  const workspaceId = me?.workspace_id as string | undefined
+  if (!workspaceId) return json({ error: 'No workspace for this account.' }, 400)
+
+  // 3. Idempotent auth user.
   const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
   if (listErr) return json({ error: listErr.message }, 500)
-  const existing = list.users.find((u) => u.email?.toLowerCase() === email)
+  const existingUser = list.users.find((u) => u.email?.toLowerCase() === email)
 
   let userId: string
   let tempPassword: string | null = null
-  let created = false
-  if (existing) {
-    userId = existing.id
+  if (existingUser) {
+    userId = existingUser.id
   } else {
     tempPassword = `ns-${crypto.randomUUID().slice(0, 10)}`
     const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: { full_name: fullName },
+      email, password: tempPassword, email_confirm: true, user_metadata: { full_name: fullName },
     })
     if (error || !data.user) return json({ error: error?.message ?? 'Could not create user' }, 400)
     userId = data.user.id
-    created = true
   }
 
-  // 4. Make sure the profile is filled in (the trigger creates a bare row).
-  const { error: profileErr } = await admin
-    .from('profiles')
-    .upsert({ id: userId, email, full_name: fullName, avatar_color: color })
-  if (profileErr) return json({ error: profileErr.message }, 500)
+  // 4. Idempotent member profile in this workspace.
+  const { data: existingProfile } = await admin
+    .from('profiles').select('id').eq('workspace_id', workspaceId).eq('auth_user_id', userId).maybeSingle()
+  let created = false
+  let profileId = existingProfile?.id as string | undefined
+  if (!profileId) {
+    const { data, error } = await admin
+      .from('profiles')
+      .insert({ workspace_id: workspaceId, auth_user_id: userId, email, full_name: fullName, avatar_color: color })
+      .select('id').single()
+    if (error) return json({ error: error.message }, 500)
+    profileId = data.id
+    created = true
+  } else {
+    tempPassword = null // already a member; no new credentials
+  }
 
   return json({
     ok: true,
     created,
-    member: { id: userId, email, full_name: fullName },
+    member: { id: profileId, email, full_name: fullName },
     temp_password: tempPassword,
   })
 })

@@ -11,14 +11,14 @@ import { epicAlignmentMap, humanizeStatus, isActiveStory, isStoryAligned, object
 import type { StoryFull } from '@/lib/types'
 
 export function MyWork() {
-  const { user } = useAuth()
+  const { profile } = useAuth()
   const storiesQ = useStories()
   const { data: epics = [] } = useEpics()
   const { data: objectives = [] } = useObjectives()
   const { data: statuses = [] } = useTaskStatuses()
   const [openId, setOpenId] = useState<string | null>(null)
 
-  const uid = user?.id
+  const uid = profile?.id
   const stories = storiesQ.data ?? []
   const epicAligned = useMemo(() => epicAlignmentMap(epics), [epics])
 

@@ -289,6 +289,7 @@ export interface SyncResult {
   ok: boolean
   ms: number
   statuses: number
+  people: number
   objectives: { created: number; updated: number; total: number }
   key_results: { created: number; updated: number; total: number; skipped: number }
   epics: { created: number; updated: number; total: number }
@@ -297,8 +298,8 @@ export interface SyncResult {
 export function useSyncAirtable() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (): Promise<SyncResult> => {
-      const { data, error } = await supabase.functions.invoke('sync-airtable', { body: {} })
+    mutationFn: async (input: { token: string; baseId: string }): Promise<SyncResult> => {
+      const { data, error } = await supabase.functions.invoke('sync-airtable', { body: input })
       if (error) {
         let message = error.message
         try {
