@@ -282,7 +282,9 @@ test('connects Airtable server-side and syncs into the workspace', async ({ page
   await expect(page.getByRole('button', { name: 'Sync now', exact: true })).toBeVisible()
 
   // The imported tasks render (guards the 1000-row cap / payload regression).
-  // The admin owns nothing, so switch the filter off "Me".
+  // Reload for a clean fetch of the freshly-synced data; admin owns nothing so
+  // switch the filter off "Me".
+  await page.reload()
   await page.getByRole('link', { name: 'Board', exact: true }).click()
   await showAllAssignees(page)
   await expect(page.getByTestId('story-card').first()).toBeVisible({ timeout: 45_000 })
