@@ -197,7 +197,7 @@ test('invites a teammate via a one-time link they can accept', async ({ page }) 
   await page.getByLabel('Invite name').fill('E2E Invitee')
   await page.getByRole('button', { name: 'Create invite link', exact: true }).click()
 
-  await expect(page.getByTestId('invite-result')).toBeVisible()
+  // The link appears in a modal (with a Copy button).
   const link = await page.getByTestId('invite-link').inputValue()
   expect(link).toContain('/accept-invite?token=')
 

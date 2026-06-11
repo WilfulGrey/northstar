@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '@/components/Layout'
 import { Avatar } from '@/components/Avatar'
+import { Modal } from '@/components/Modal'
 import { Spinner, ErrorState } from '@/components/States'
 import { useInviteMember, useProfiles, type InviteResult } from '@/lib/api'
 import { displayName } from '@/lib/format'
@@ -15,17 +16,14 @@ export function Team() {
   const [name, setName] = useState('')
   const [result, setResult] = useState<InviteResult | null>(null)
   const [errMsg, setErrMsg] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   async function runInvite(targetEmail: string, targetName?: string) {
     const clean = targetEmail.trim()
     if (!clean) return
     setErrMsg(null)
-    setResult(null)
-    setCopied(false)
     try {
       const res = await invite.mutateAsync({ email: clean, full_name: targetName?.trim() || undefined })
-      setResult(res)
+      setResult(res) // opens the link modal
       setEmail('')
       setName('')
     } catch (e) {
@@ -63,37 +61,7 @@ export function Team() {
                 {invite.isPending ? 'Creating…' : 'Create invite link'}
               </button>
             </form>
-
             {errMsg && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errMsg}</p>}
-
-            {result && (
-              <div data-testid="invite-result" className="mt-3 rounded-lg bg-emerald-50 p-3">
-                <p className="text-sm font-medium text-emerald-800">
-                  Invite link for {result.email}
-                  {result.already_member ? ' (already a member — link refreshes their access)' : ''}:
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    aria-label="Invite link"
-                    data-testid="invite-link"
-                    readOnly
-                    className="input flex-1 bg-white font-mono text-xs"
-                    value={linkFor(result.token)}
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                  <button
-                    className="btn btn-secondary shrink-0"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(linkFor(result.token))
-                      setCopied(true)
-                      setTimeout(() => setCopied(false), 1500)
-                    }}
-                  >
-                    {copied ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-              </div>
-            )}
           </section>
 
           <section>
@@ -119,6 +87,8 @@ export function Team() {
           </section>
         </div>
       </div>
+
+      {result && <InviteLinkModal result={result} onClose={() => setResult(null)} />}
     </>
   )
 }
@@ -134,5 +104,57 @@ function MemberAction({ member, onInvite, pending }: { member: Profile; onInvite
     <button className="btn btn-secondary shrink-0 text-xs" onClick={onInvite} disabled={pending}>
       Invite
     </button>
+  )
+}
+
+function InviteLinkModal({ result, onClose }: { result: InviteResult; onClose: () => void }) {
+  const link = linkFor(result.token)
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  // Best-effort auto-copy on open; the button is the reliable fallback.
+  useEffect(() => {
+    void copy()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Invite link"
+      footer={
+        <>
+          <button className="btn btn-secondary" onClick={onClose}>Done</button>
+          <button className="btn btn-primary" onClick={() => void copy()}>{copied ? 'Copied!' : 'Copy link'}</button>
+        </>
+      }
+    >
+      <p className="text-sm text-zinc-600">
+        Send this one-time link to <span className="font-medium text-zinc-800">{result.email}</span> (valid 7 days).
+        {result.already_member ? ' They are already a member — this refreshes their access.' : ''}
+      </p>
+      <input
+        aria-label="Invite link"
+        data-testid="invite-link"
+        readOnly
+        autoFocus
+        className="input mt-3 w-full bg-zinc-50 font-mono text-xs"
+        value={link}
+        onFocus={(e) => e.currentTarget.select()}
+      />
+      <p className="mt-2 text-xs text-zinc-400">
+        {copied ? '✓ Copied to your clipboard.' : 'Tip: click “Copy link”, then paste it into Slack or an email.'}
+      </p>
+    </Modal>
   )
 }
