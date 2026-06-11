@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { Layout } from './components/Layout'
 import { Spinner } from './components/States'
 import { Login } from './pages/Login'
+import { AcceptInvite } from './pages/AcceptInvite'
 import { Dashboard } from './pages/Dashboard'
 import { MyWork } from './pages/MyWork'
 import { Okrs } from './pages/Okrs'
@@ -38,6 +39,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/accept-invite" element={<AcceptInvite />} />
       <Route element={<Protected />}>
         <Route index element={<Dashboard />} />
         <Route path="mywork" element={<MyWork />} />

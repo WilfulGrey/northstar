@@ -188,17 +188,25 @@ test('My Work lists the stories assigned to me', async ({ page }) => {
 
 // ---------------- v1.3 ----------------
 
-test('invites a teammate through the edge function', async ({ page }) => {
+test('invites a teammate via a one-time link they can accept', async ({ page }) => {
   await login(page)
   await page.getByRole('link', { name: 'Team', exact: true }).click()
 
-  const email = `e2e-invite-${Date.now().toString().slice(-7)}@northstar.app`
-  await page.getByLabel('Invite email').fill(email)
-  await page.getByLabel('Invite name').fill('E2E Teammate')
-  await page.getByRole('button', { name: 'Invite', exact: true }).click()
+  const emailAddr = `e2e-invite-${Date.now().toString().slice(-7)}@northstar.app`
+  await page.getByLabel('Invite email').fill(emailAddr)
+  await page.getByLabel('Invite name').fill('E2E Invitee')
+  await page.getByRole('button', { name: 'Create invite link', exact: true }).click()
 
   await expect(page.getByTestId('invite-result')).toBeVisible()
-  await expect(page.getByTestId('member-list').getByText(email)).toBeVisible()
+  const link = await page.getByTestId('invite-link').inputValue()
+  expect(link).toContain('/accept-invite?token=')
+
+  // Accept the invite → set a password → land signed in as the new member.
+  await page.goto(link)
+  await page.getByLabel('Password', { exact: true }).fill('invitee-pass-123')
+  await page.getByLabel('Confirm password').fill('invitee-pass-123')
+  await page.getByRole('button', { name: /Set password & sign in/ }).click()
+  await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible()
 })
 
 test('a story opens from a shareable deep link', async ({ page }) => {

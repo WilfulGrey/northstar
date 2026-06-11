@@ -1,10 +1,9 @@
-// Northstar — invite a teammate.
+// Northstar — invite a teammate by link.
 //
-// Why a server-side function? Creating an auth user needs the service_role key,
-// which must never reach the browser. This Edge Function runs with verify_jwt
-// on, so only an authenticated team member can call it; it then uses the
-// service role (injected by the platform) to provision the account. Idempotent:
-// inviting an existing email returns that member.
+// Creates (or reuses) an auth user for the email, links it to a profile in the
+// caller's workspace (a synced Airtable Team contact gets upgraded to a login),
+// and mints a one-time token. The caller turns the token into a link and shares
+// it; the invitee opens it and sets a password (see accept-invite).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
@@ -13,93 +12,63 @@ const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
-
-const COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#64748b']
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...cors, 'Content-Type': 'application/json' },
-  })
-}
+const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } })
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
   const url = Deno.env.get('SUPABASE_URL')!
-  const anon = Deno.env.get('SUPABASE_ANON_KEY')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const anon = Deno.env.get('SUPABASE_ANON_KEY')!
 
-  // 1. Confirm the caller is a real, signed-in user (not just the anon key).
-  const authHeader = req.headers.get('Authorization') ?? ''
-  const caller = createClient(url, anon, { global: { headers: { Authorization: authHeader } } })
-  const {
-    data: { user },
-    error: authErr,
-  } = await caller.auth.getUser()
-  if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
+  const caller = createClient(url, anon, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
+  const { data: { user } } = await caller.auth.getUser()
+  if (!user) return json({ error: 'Unauthorized' }, 401)
 
-  // 2. Validate input.
   let payload: { email?: string; full_name?: string }
-  try {
-    payload = await req.json()
-  } catch {
-    return json({ error: 'Invalid JSON body' }, 400)
-  }
+  try { payload = await req.json() } catch { return json({ error: 'Invalid JSON body' }, 400) }
   const email = (payload.email ?? '').trim().toLowerCase()
   const fullName = (payload.full_name ?? '').trim() || email.split('@')[0]
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    return json({ error: 'A valid email is required' }, 400)
-  }
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'A valid email is required' }, 400)
 
   const admin = createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } })
-  const color = COLORS[[...email].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length]
-
-  // The invite lands in the caller's workspace.
   const { data: me } = await admin.from('profiles').select('workspace_id').eq('auth_user_id', user.id).maybeSingle()
-  const workspaceId = me?.workspace_id as string | undefined
-  if (!workspaceId) return json({ error: 'No workspace for this account.' }, 400)
+  const W = me?.workspace_id as string | undefined
+  if (!W) return json({ error: 'No workspace for this account.' }, 400)
 
-  // 3. Idempotent auth user.
+  // 1. Auth user (created without a usable password until they accept).
   const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
   if (listErr) return json({ error: listErr.message }, 500)
   const existingUser = list.users.find((u) => u.email?.toLowerCase() === email)
-
   let userId: string
-  let tempPassword: string | null = null
   if (existingUser) {
     userId = existingUser.id
   } else {
-    tempPassword = `ns-${crypto.randomUUID().slice(0, 10)}`
     const { data, error } = await admin.auth.admin.createUser({
-      email, password: tempPassword, email_confirm: true, user_metadata: { full_name: fullName },
+      email, password: `pending-${crypto.randomUUID()}`, email_confirm: true, user_metadata: { full_name: fullName },
     })
     if (error || !data.user) return json({ error: error?.message ?? 'Could not create user' }, 400)
     userId = data.user.id
   }
 
-  // 4. Idempotent member profile in this workspace.
-  const { data: existingProfile } = await admin
-    .from('profiles').select('id').eq('workspace_id', workspaceId).eq('auth_user_id', userId).maybeSingle()
-  let created = false
-  let profileId = existingProfile?.id as string | undefined
-  if (!profileId) {
-    const { data, error } = await admin
-      .from('profiles')
-      .insert({ workspace_id: workspaceId, auth_user_id: userId, email, full_name: fullName, avatar_color: color })
-      .select('id').single()
-    if (error) return json({ error: error.message }, 500)
-    profileId = data.id
-    created = true
+  // 2. Link a workspace profile to that user. Prefer upgrading an existing
+  //    contact (e.g. a synced Airtable Team member) with the same email.
+  const { data: contact } = await admin
+    .from('profiles').select('id,auth_user_id').eq('workspace_id', W).ilike('email', email).maybeSingle()
+  let alreadyMember = false
+  if (contact) {
+    if (contact.auth_user_id && contact.auth_user_id === userId) alreadyMember = true
+    await admin.from('profiles').update({ auth_user_id: userId, full_name: fullName }).eq('id', contact.id)
   } else {
-    tempPassword = null // already a member; no new credentials
+    await admin.from('profiles').insert({ workspace_id: W, auth_user_id: userId, email, full_name: fullName })
   }
 
-  return json({
-    ok: true,
-    created,
-    member: { id: profileId, email, full_name: fullName },
-    temp_password: tempPassword,
-  })
+  // 3. One-time invite token (7 days).
+  const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '')
+  const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+  const { error: invErr } = await admin.from('invites').insert({ token, email, auth_user_id: userId, workspace_id: W, expires_at: expires })
+  if (invErr) return json({ error: invErr.message }, 500)
+
+  return json({ ok: true, token, email, full_name: fullName, already_member: alreadyMember })
 })

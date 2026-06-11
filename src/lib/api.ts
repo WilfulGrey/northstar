@@ -285,9 +285,10 @@ export function useDeleteStory() {
 // Team — invite a member through the Edge Function (service-role stays server-side).
 export interface InviteResult {
   ok: boolean
-  created: boolean
-  member: { id: string; email: string; full_name: string }
-  temp_password: string | null
+  token: string
+  email: string
+  full_name: string
+  already_member: boolean
 }
 export function useInviteMember() {
   const qc = useQueryClient()
