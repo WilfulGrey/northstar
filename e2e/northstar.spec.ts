@@ -244,4 +244,10 @@ test('syncs an Airtable base into its own workspace', async ({ page }) => {
   await page.getByRole('button', { name: 'Sync from Airtable', exact: true }).click()
   await expect(page.getByTestId('sync-result')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('sync-result')).toContainText(/people/)
+
+  // The imported tasks must actually render (guards the 1000-row cap / payload regression).
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await expect(page.getByTestId('story-card').first()).toBeVisible({ timeout: 20_000 })
+  await page.getByTestId('view-list').click()
+  await expect(page.getByTestId('task-row').first()).toBeVisible()
 })

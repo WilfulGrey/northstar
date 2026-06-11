@@ -15,6 +15,7 @@ import {
   useObjectives,
   useProfiles,
   useStories,
+  useStory,
   useTaskStatuses,
   useUpdateStory,
 } from '@/lib/api'
@@ -33,6 +34,7 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
   const { data: epics = [] } = useEpics()
   const { data: objectives = [] } = useObjectives()
   const { data: statuses = [] } = useTaskStatuses()
+  const { data: full } = useStory(storyId)
   const update = useUpdateStory()
   const del = useDeleteStory()
   const qc = useQueryClient()
@@ -52,7 +54,12 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
     if (!story) return
     update.mutate(
       { id: story.id, ...patch },
-      { onSuccess: () => qc.invalidateQueries({ queryKey: keys.activity(story.id) }) },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: keys.activity(story.id) })
+          qc.invalidateQueries({ queryKey: ['story', story.id] })
+        },
+      },
     )
   }
 
@@ -165,12 +172,12 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
               <textarea
                 aria-label="Story description"
                 className="input min-h-[80px] resize-y"
-                defaultValue={story.description ?? ''}
-                key={`desc-${story.id}`}
+                defaultValue={full?.description ?? ''}
+                key={`desc-${story.id}-${full ? 'loaded' : 'loading'}`}
                 placeholder="As a … I want … so that …"
                 onBlur={(e) => {
                   const v = e.target.value.trim() || null
-                  if (v !== (story.description ?? null)) set({ description: v })
+                  if (v !== (full?.description ?? null)) set({ description: v })
                 }}
               />
             </div>

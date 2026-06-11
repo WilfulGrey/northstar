@@ -81,17 +81,42 @@ export function useEpics() {
   })
 }
 
+// Slim list select — no description (richText, the payload bomb) and only the
+// profile fields we render. The story-detail drawer fetches the full row.
+const STORY_LIST_SELECT =
+  'id,ref,title,status,priority,estimate,epic_id,key_result_id,assignee_id,position,created_at,updated_at,' +
+  ' epic:epics(id,title,color,objective_id), assignee:profiles(id,full_name,email,avatar_color),' +
+  ' key_result:key_results(id,title), status_info:task_statuses(name,category,color,position)'
+
 export function useStories() {
   return useQuery({
     queryKey: keys.stories,
-    queryFn: async () =>
-      throwOnError<StoryFull[]>(
-        await supabase
+    queryFn: async () => {
+      // Page past the server's 1000-row cap so large workspaces load fully.
+      const pageSize = 1000
+      const all: StoryFull[] = []
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
           .from('stories')
-          .select(
-            '*, epic:epics(id,title,color,objective_id), assignee:profiles(*), key_result:key_results(id,title), status_info:task_statuses(name,category,color,position)',
-          )
-          .order('position', { ascending: true }),
+          .select(STORY_LIST_SELECT)
+          .order('position', { ascending: true })
+          .range(from, from + pageSize - 1)
+        if (error) throw new Error(error.message)
+        all.push(...((data ?? []) as unknown as StoryFull[]))
+        if (!data || data.length < pageSize) break
+      }
+      return all
+    },
+  })
+}
+
+// Full single story (incl. description) for the detail drawer.
+export function useStory(id: string) {
+  return useQuery({
+    queryKey: ['story', id],
+    queryFn: async () =>
+      throwOnError<{ id: string; description: string | null }>(
+        await supabase.from('stories').select('id,description').eq('id', id).single(),
       ),
   })
 }
