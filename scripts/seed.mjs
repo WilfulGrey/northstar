@@ -47,11 +47,6 @@ async function deleteAuthUsersByEmail(predicate) {
   return n
 }
 
-async function clear(table, col = 'id') {
-  const { error } = await db.from(table).delete().not(col, 'is', null)
-  if (error) throw new Error(`clear ${table}: ${error.message}`)
-}
-
 async function insert(table, rows) {
   const { data, error } = await db.from(table).insert(rows).select()
   if (error) throw new Error(`insert ${table}: ${error.message}`)
@@ -68,31 +63,41 @@ async function main() {
   )
   if (removed) console.log(`  removed ${removed} stale auth account(s).`)
 
-  console.log('→ wiping all data…')
-  for (const [t, col] of [
-    ['activity'], ['comments'], ['kr_checkins'], ['stories'], ['task_statuses', 'name'],
-    ['epics'], ['key_results'], ['objectives'], ['cycles'], ['profiles'], ['workspaces'],
-  ]) {
-    await clear(t, col ?? 'id')
+  // SAFETY: we only ever reset the *Demo* workspace. Real workspaces (e.g.
+  // Mamamia) and their members/connections are never touched, so re-seeding
+  // can't wipe live data again.
+  const found = await db.from('workspaces').select('id').eq('name', 'Demo').limit(1)
+  if (found.error) throw new Error(`find Demo: ${found.error.message}`)
+  let demoWs = found.data?.[0]
+  if (!demoWs) demoWs = (await insert('workspaces', [{ name: 'Demo' }]))[0]
+  const W = demoWs.id
+
+  console.log('→ wiping the Demo workspace only…')
+  for (const t of ['activity', 'comments', 'kr_checkins', 'stories', 'task_statuses', 'epics', 'key_results', 'objectives', 'cycles', 'profiles']) {
+    const { error } = await db.from(t).delete().eq('workspace_id', W)
+    if (error) throw new Error(`wipe ${t}: ${error.message}`)
   }
 
-  console.log('→ creating workspaces…')
-  const [demoWs, mamamiaWs] = await insert('workspaces', [{ name: 'Demo' }, { name: 'Mamamia' }])
-
-  console.log('→ creating people…')
+  console.log('→ creating demo people…')
   const demoProfiles = await insert(
     'profiles',
     DEMO_PEOPLE.map((p) => ({
-      workspace_id: demoWs.id,
+      workspace_id: W,
       auth_user_id: p.auth ? demoAuthId : null,
       email: p.email, full_name: p.name, avatar_color: p.color,
     })),
   )
   const pid = Object.fromEntries(DEMO_PEOPLE.map((p, i) => [p.key, demoProfiles[i].id]))
-  await insert('profiles', [{
-    workspace_id: mamamiaWs.id, auth_user_id: mamamiaAuthId,
-    email: 'mamamia@northstar.app', full_name: 'Mamamia Admin', avatar_color: '#0ea5e9',
-  }])
+
+  // Ensure a (separate) Mamamia workspace + admin exist — only if missing; never wiped.
+  const mam = await db.from('workspaces').select('id').eq('name', 'Mamamia').limit(1)
+  if (!mam.data?.length) {
+    const mamWs = (await insert('workspaces', [{ name: 'Mamamia' }]))[0]
+    await insert('profiles', [{
+      workspace_id: mamWs.id, auth_user_id: mamamiaAuthId,
+      email: 'mamamia@northstar.app', full_name: 'Mamamia Admin', avatar_color: '#0ea5e9',
+    }])
+  }
 
   console.log('→ demo board statuses…')
   await insert('task_statuses', [
@@ -105,7 +110,6 @@ async function main() {
   ])
 
   console.log('→ demo objectives, key results, check-ins…')
-  const W = demoWs.id
   const [cycle] = await insert('cycles', [{ workspace_id: W, name: 'Q2 2026', starts_on: '2026-04-01', ends_on: '2026-06-30' }])
 
   const objectiveDefs = [
