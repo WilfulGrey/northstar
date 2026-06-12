@@ -264,6 +264,19 @@ test('board assignee filter defaults to Me and clears to all', async ({ page }) 
   await expect(page.getByText('Postmortem template & on-call rota')).toHaveCount(0)
 })
 
+test('jumps from an epic to its tasks on the board', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Epics', exact: true }).click()
+
+  const card = page.locator('div.card').filter({ hasText: 'Onboarding & activation flow' }).first()
+  await card.getByRole('button', { name: /Tasks/ }).click()
+
+  await expect(page).toHaveURL(/\/board/)
+  // Filtered to the onboarding epic (all assignees): its task shows, another epic's doesn't.
+  await expect(page.getByText('Design first-run welcome checklist')).toBeVisible()
+  await expect(page.getByText('Add Sentry error tracking')).toHaveCount(0)
+})
+
 test('archiving a story hides it; the toggle reveals it; unarchive restores', async ({ page }) => {
   const TITLE = 'Postmortem template & on-call rota' // assigned to demo → visible under the default "Me"
   await login(page)

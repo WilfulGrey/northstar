@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/Layout'
 import { ProgressBar } from '@/components/ProgressBar'
 import { Avatar } from '@/components/Avatar'
@@ -20,6 +20,7 @@ export function Epics() {
   const del = useDeleteEpic()
   const update = useUpdateEpic()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const visible = (epics ?? []).filter((e) => showArchived || !isArchived(e))
 
@@ -87,6 +88,13 @@ export function Epics() {
                   <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-3">
                     <ObjectiveLink epic={epic} />
                     <div className="flex items-center gap-1">
+                      <button
+                        className="btn btn-secondary px-2 py-1 text-xs"
+                        onClick={() => navigate(`/board?epic=${epic.id}`)}
+                        title="View this epic's tasks on the board"
+                      >
+                        Tasks →
+                      </button>
                       <Avatar profile={epic.owner} size={22} />
                       <button
                         className="btn btn-ghost px-1.5 text-xs opacity-0 transition group-hover:opacity-100"

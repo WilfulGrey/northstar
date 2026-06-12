@@ -54,6 +54,16 @@ export function Board() {
     if (story) setOpenId(story.id)
   }, [searchParams, stories])
 
+  // Deep link from an epic: /board?epic=<id> filters to that epic and shows
+  // everyone's tasks (not just "Me"), then cleans the URL.
+  useEffect(() => {
+    const epicParam = searchParams.get('epic')
+    if (!epicParam) return
+    setEpicFilter(epicParam)
+    setAssigneeFilter('')
+    setSearchParams((prev) => { prev.delete('epic'); return prev }, { replace: true })
+  }, [searchParams, setSearchParams])
+
   function closeDrawer() {
     setOpenId(null)
     if (searchParams.has('story')) {
