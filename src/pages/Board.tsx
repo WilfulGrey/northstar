@@ -8,7 +8,8 @@ import { StoryModal } from '@/modals/StoryModal'
 import { StoryDetail } from '@/components/StoryDetail'
 import { useEpics, useProfiles, useStories, useTaskStatuses, useUpdateStory } from '@/lib/api'
 import { useAuth } from '@/auth/AuthProvider'
-import { displayName, humanizeStatus } from '@/lib/format'
+import { ArchiveToggle, ArchivedTag } from '@/components/Archive'
+import { displayName, humanizeStatus, isStoryArchived } from '@/lib/format'
 import type { StoryFull, TaskStatus } from '@/lib/types'
 
 const NONE = '__none'
@@ -29,6 +30,7 @@ export function Board() {
   const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>(undefined)
   const me = profile?.id ?? ''
   const assignee = assigneeFilter === undefined ? me : assigneeFilter
+  const [showArchived, setShowArchived] = useState(false)
   const [view, setView] = useState<'board' | 'list'>('board')
   const [creating, setCreating] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -63,9 +65,15 @@ export function Board() {
   const matchesAssignee = (s: StoryFull) =>
     !assignee ? true : assignee === UNASSIGNED ? s.assignee_id == null : s.assignee_id === assignee
   const filtered = useMemo(
-    () => (stories ?? []).filter((s) => (epicFilter ? s.epic_id === epicFilter : true) && matchesAssignee(s)),
+    () =>
+      (stories ?? []).filter(
+        (s) =>
+          (epicFilter ? s.epic_id === epicFilter : true) &&
+          matchesAssignee(s) &&
+          (showArchived || !isStoryArchived(s)),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stories, epicFilter, assignee],
+    [stories, epicFilter, assignee, showArchived],
   )
   const byStatus = useMemo(() => {
     const map = new Map<string, StoryFull[]>()
@@ -95,7 +103,7 @@ export function Board() {
     <>
       <PageHeader
         title="Board"
-        subtitle="Every story, by status. Columns come from your statuses — drag to move, click to open."
+        subtitle="Drag to move, click to open."
         action={
           <div className="flex items-center gap-2">
             <div className="flex rounded-md border border-zinc-200 p-0.5">
@@ -147,6 +155,7 @@ export function Board() {
                 <option key={e.id} value={e.id}>{e.title}</option>
               ))}
             </select>
+            <ArchiveToggle on={showArchived} onChange={setShowArchived} />
             <button className="btn btn-primary" onClick={() => setCreating(statuses[0]?.name ?? 'backlog')}>
               + New story
             </button>
@@ -241,6 +250,7 @@ function StoryCard({
   onDragStart: () => void
   onDragEnd: () => void
 }) {
+  const archived = isStoryArchived(story)
   return (
     <div
       role="button"
@@ -252,7 +262,7 @@ function StoryCard({
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen() }}
       data-testid="story-card"
       data-story-title={story.title}
-      className="card cursor-pointer p-3 shadow-sm transition hover:border-indigo-300 hover:shadow"
+      className={`card cursor-pointer p-3 shadow-sm transition hover:border-indigo-300 hover:shadow ${archived ? 'opacity-60' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium leading-snug text-zinc-800">{story.title}</p>
@@ -262,6 +272,7 @@ function StoryCard({
       <div className="mt-2.5 flex items-center justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <span className="font-mono text-[11px] text-zinc-400">NS-{story.ref}</span>
+          {archived && <ArchivedTag />}
           {story.epic && (
             <span className="inline-flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-zinc-600" style={{ backgroundColor: `${story.epic.color}1a` }}>
               <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: story.epic.color }} />
@@ -318,7 +329,7 @@ function TasksList({
                 data-testid="task-row"
                 data-story-title={s.title}
                 onClick={() => onOpen(s.id)}
-                className="cursor-pointer border-b border-zinc-50 last:border-0 hover:bg-zinc-50"
+                className={`cursor-pointer border-b border-zinc-50 last:border-0 hover:bg-zinc-50 ${isStoryArchived(s) ? 'opacity-60' : ''}`}
               >
                 <td className="whitespace-nowrap px-4 py-2.5">
                   <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600">
@@ -329,6 +340,7 @@ function TasksList({
                 <td className="px-2 py-2.5">
                   <span className="font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>{' '}
                   <span className="text-zinc-800">{s.title}</span>
+                  {isStoryArchived(s) && <ArchivedTag className="ml-2 align-middle" />}
                 </td>
                 <td className="max-w-[180px] truncate px-2 py-2.5 text-xs text-zinc-500">{s.epic?.title ?? '—'}</td>
                 <td className="px-2 py-2.5 text-center"><PriorityIcon priority={s.priority} /></td>

@@ -85,8 +85,8 @@ export function useEpics() {
 // Slim list select — no description (richText, the payload bomb) and only the
 // profile fields we render. The story-detail drawer fetches the full row.
 const STORY_LIST_SELECT =
-  'id,ref,title,status,priority,estimate,epic_id,key_result_id,assignee_id,position,created_at,updated_at,' +
-  ' epic:epics(id,title,color,objective_id), assignee:profiles(id,full_name,email,avatar_color),' +
+  'id,ref,title,status,priority,estimate,epic_id,key_result_id,assignee_id,position,archived_at,created_at,updated_at,' +
+  ' epic:epics(id,title,color,objective_id,archived_at), assignee:profiles(id,full_name,email,avatar_color),' +
   ' key_result:key_results(id,title), status_info:task_statuses(name,category,color,position)'
 
 export function useStories() {

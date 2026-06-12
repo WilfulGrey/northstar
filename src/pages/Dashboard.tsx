@@ -9,7 +9,7 @@ import { StoryDetail } from '@/components/StoryDetail'
 import { ObjectiveDetail } from '@/components/ObjectiveDetail'
 import { useAuth } from '@/auth/AuthProvider'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
-import { alignment, displayName, epicAlignmentMap, isActiveStory, isStoryAligned, objectiveProgress, pct } from '@/lib/format'
+import { alignment, displayName, epicAlignmentMap, isActiveStory, isArchived, isStoryAligned, isStoryArchived, objectiveProgress, pct } from '@/lib/format'
 import type { ObjectiveFull } from '@/lib/types'
 
 export function Dashboard() {
@@ -27,17 +27,20 @@ export function Dashboard() {
   const loading = objectivesQ.isLoading || epicsQ.isLoading || storiesQ.isLoading
   const error = objectivesQ.error || epicsQ.error || storiesQ.error
 
-  const align = useMemo(() => alignment(stories, epics), [stories, epics])
+  // Archived work isn't "in flight" — exclude it from the alignment metric.
+  const liveStories = useMemo(() => stories.filter((s) => !isStoryArchived(s)), [stories])
+  const liveObjectives = useMemo(() => objectives.filter((o) => !isArchived(o)), [objectives])
+  const align = useMemo(() => alignment(liveStories, epics), [liveStories, epics])
   const avgProgress = useMemo(
-    () => (objectives.length ? objectives.reduce((a, o) => a + objectiveProgress(o), 0) / objectives.length : 0),
-    [objectives],
+    () => (liveObjectives.length ? liveObjectives.reduce((a, o) => a + objectiveProgress(o), 0) / liveObjectives.length : 0),
+    [liveObjectives],
   )
   const epicAligned = useMemo(() => epicAlignmentMap(epics), [epics])
   const unaligned = useMemo(
-    () => stories.filter((s) => isActiveStory(s) && !isStoryAligned(s, epicAligned)),
-    [stories, epicAligned],
+    () => liveStories.filter((s) => isActiveStory(s) && !isStoryAligned(s, epicAligned)),
+    [liveStories, epicAligned],
   )
-  const activeCount = stories.filter(isActiveStory).length
+  const activeCount = liveStories.filter(isActiveStory).length
 
   return (
     <>
@@ -53,7 +56,7 @@ export function Dashboard() {
         ) : (
           <div className="mx-auto max-w-5xl space-y-6">
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat label="Objectives" value={String(objectives.length)} hint="this workspace" />
+              <Stat label="Objectives" value={String(liveObjectives.length)} hint="this workspace" />
               <Stat label="Avg OKR progress" value={pct(avgProgress)} hint="across objectives" />
               <Stat label="Work aligned" value={pct(align.ratio)} hint={`${align.aligned}/${align.total} active stories`} emphasis />
               <Stat label="In flight" value={String(activeCount)} hint="stories in progress" />
@@ -69,10 +72,10 @@ export function Dashboard() {
                   </Link>
                 </div>
                 <div className="card divide-y divide-zinc-100">
-                  {objectives.length === 0 ? (
+                  {liveObjectives.length === 0 ? (
                     <p className="p-4 text-sm text-zinc-400">No objectives yet.</p>
                   ) : (
-                    objectives.map((o) => (
+                    liveObjectives.map((o) => (
                       <button
                         key={o.id}
                         onClick={() => setOpenObj(o)}

@@ -31,6 +31,15 @@ export function humanizeStatus(name: string | null | undefined): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+// --- Archiving ---
+export function isArchived(x: { archived_at?: string | null } | null | undefined): boolean {
+  return x?.archived_at != null
+}
+/** A story is archived if it is, or if its epic is (tasks inherit epic archival). */
+export function isStoryArchived(s: { archived_at?: string | null; epic?: { archived_at?: string | null } | null }): boolean {
+  return s.archived_at != null || s.epic?.archived_at != null
+}
+
 /**
  * Progress of a single key result, 0..1.
  * Works for "up" metrics (0 → 100) and "down" metrics (12 bugs → 0) alike,

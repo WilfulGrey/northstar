@@ -10,14 +10,16 @@ import { ObjectiveModal } from '@/modals/ObjectiveModal'
 import { KeyResultModal } from '@/modals/KeyResultModal'
 import { KeyResultDetail } from '@/components/KeyResultDetail'
 import { ObjectiveDetail } from '@/components/ObjectiveDetail'
+import { ArchiveToggle, ArchivedTag } from '@/components/Archive'
 import {
   useAllCheckins,
   useDeleteKeyResult,
   useDeleteObjective,
   useObjectives,
   useUpdateKeyResult,
+  useUpdateObjective,
 } from '@/lib/api'
-import { formatMetric, krProgress, objectiveProgress, pct, timeAgo } from '@/lib/format'
+import { formatMetric, isArchived, krProgress, objectiveProgress, pct, timeAgo } from '@/lib/format'
 import type { KeyResult, ObjectiveFull } from '@/lib/types'
 
 export function Okrs() {
@@ -27,6 +29,7 @@ export function Okrs() {
   const [edit, setEdit] = useState<ObjectiveFull | null>(null)
   const [detailKr, setDetailKr] = useState<KeyResult | null>(null)
   const [detailObj, setDetailObj] = useState<ObjectiveFull | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
   const location = useLocation()
 
   useEffect(() => {
@@ -42,7 +45,10 @@ export function Okrs() {
     }
   }, [location.state, objectives])
 
-  const groups = useMemo(() => groupByCycle(objectives ?? []), [objectives])
+  const groups = useMemo(
+    () => groupByCycle((objectives ?? []).filter((o) => showArchived || !isArchived(o))),
+    [objectives, showArchived],
+  )
   const checkinsByKr = useMemo(() => {
     const m = new Map<string, number[]>()
     for (const c of allCheckins) {
@@ -58,9 +64,12 @@ export function Okrs() {
         title="OKRs"
         subtitle="Objectives and the measurable results that define success."
         action={
-          <button className="btn btn-primary" onClick={() => setNewOpen(true)}>
-            + New objective
-          </button>
+          <div className="flex items-center gap-2">
+            <ArchiveToggle on={showArchived} onChange={setShowArchived} />
+            <button className="btn btn-primary" onClick={() => setNewOpen(true)}>
+              + New objective
+            </button>
+          </div>
         }
       />
       <div className="flex-1 overflow-y-auto px-7 py-6">
@@ -92,6 +101,7 @@ export function Okrs() {
                       onOpenKr={setDetailKr}
                       onOpenDetail={() => setDetailObj(o)}
                       checkinsByKr={checkinsByKr}
+                      showArchived={showArchived}
                     />
                   ))}
                 </div>
@@ -115,20 +125,25 @@ function ObjectiveCard({
   onOpenKr,
   onOpenDetail,
   checkinsByKr,
+  showArchived,
 }: {
   objective: ObjectiveFull
   onEdit: () => void
   onOpenKr: (kr: KeyResult) => void
   onOpenDetail: () => void
   checkinsByKr: Map<string, number[]>
+  showArchived: boolean
 }) {
   const [addKr, setAddKr] = useState(false)
   const [editKr, setEditKr] = useState<KeyResult | null>(null)
   const del = useDeleteObjective()
+  const update = useUpdateObjective()
   const progress = objectiveProgress(objective)
+  const archived = isArchived(objective)
+  const krs = objective.key_results.filter((kr) => showArchived || !isArchived(kr))
 
   return (
-    <div className="card p-5">
+    <div className={`card p-5 ${archived ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -136,11 +151,19 @@ function ObjectiveCard({
               {objective.title}
             </button>
             <ObjectiveStatusBadge status={objective.status} />
+            {archived && <ArchivedTag />}
           </div>
           {objective.description && <p className="mt-1 text-sm text-zinc-500">{objective.description}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Avatar profile={objective.owner} size={26} />
+          <button
+            className="btn btn-ghost px-2"
+            onClick={() => update.mutate({ id: objective.id, archived_at: archived ? null : new Date().toISOString() })}
+            title={archived ? 'Unarchive objective' : 'Archive objective'}
+          >
+            {archived ? 'Unarchive' : 'Archive'}
+          </button>
           <button className="btn btn-ghost px-2" onClick={onEdit} title="Edit objective">
             Edit
           </button>
@@ -162,10 +185,10 @@ function ObjectiveCard({
       </div>
 
       <div className="mt-4 divide-y divide-zinc-100 border-t border-zinc-100">
-        {objective.key_results.length === 0 ? (
+        {krs.length === 0 ? (
           <p className="py-3 text-sm text-zinc-400">No key results yet.</p>
         ) : (
-          objective.key_results.map((kr) => (
+          krs.map((kr) => (
             <KeyResultRow
               key={kr.id}
               kr={kr}
@@ -202,6 +225,7 @@ function KeyResultRow({
   const del = useDeleteKeyResult()
   const [value, setValue] = useState(String(kr.current_value))
   const ratio = krProgress({ ...kr, current_value: Number(value) || 0 })
+  const archived = isArchived(kr)
 
   function commit() {
     const next = Number(value)
@@ -213,15 +237,18 @@ function KeyResultRow({
   }
 
   return (
-    <div className="flex items-center gap-4 py-3" data-testid="kr-row" data-kr-title={kr.title}>
+    <div className={`flex items-center gap-4 py-3 ${archived ? 'opacity-60' : ''}`} data-testid="kr-row" data-kr-title={kr.title}>
       <div className="min-w-0 flex-1">
-        <button
-          className="truncate rounded text-left text-sm font-medium text-zinc-800 hover:text-indigo-600"
-          onClick={onOpenDetail}
-          title="View contributing work"
-        >
-          {kr.title}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="truncate rounded text-left text-sm font-medium text-zinc-800 hover:text-indigo-600"
+            onClick={onOpenDetail}
+            title="View contributing work"
+          >
+            {kr.title}
+          </button>
+          {archived && <ArchivedTag />}
+        </div>
         <div className="mt-1.5 flex items-center gap-3">
           <ProgressBar ratio={ratio} className="max-w-[220px]" />
           <span className="text-xs font-medium tabular-nums text-zinc-500">{pct(ratio)}</span>
@@ -251,6 +278,12 @@ function KeyResultRow({
         </span>
       </div>
       <div className="flex shrink-0 items-center">
+        <button
+          className="btn btn-ghost px-1.5 text-xs"
+          onClick={() => update.mutate({ id: kr.id, archived_at: archived ? null : new Date().toISOString() })}
+        >
+          {archived ? 'Unarchive' : 'Archive'}
+        </button>
         <button className="btn btn-ghost px-1.5 text-xs" onClick={onEdit}>
           Edit
         </button>

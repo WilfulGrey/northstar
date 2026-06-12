@@ -264,6 +264,53 @@ test('board assignee filter defaults to Me and clears to all', async ({ page }) 
   await expect(page.getByText('Postmortem template & on-call rota')).toHaveCount(0)
 })
 
+test('archiving a story hides it; the toggle reveals it; unarchive restores', async ({ page }) => {
+  const TITLE = 'Postmortem template & on-call rota' // assigned to demo → visible under the default "Me"
+  await login(page)
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await expect(page.locator(`[data-story-title="${TITLE}"]`)).toBeVisible()
+
+  // Archive from the drawer → it disappears from the board.
+  await page.locator(`[data-story-title="${TITLE}"]`).click()
+  await page.getByRole('button', { name: 'Archive', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator(`[data-story-title="${TITLE}"]`)).toHaveCount(0)
+
+  // "Show archived" reveals it again.
+  await page.getByTestId('toggle-archived').click()
+  await expect(page.locator(`[data-story-title="${TITLE}"]`)).toBeVisible()
+
+  // Unarchive to restore state for other tests.
+  await page.locator(`[data-story-title="${TITLE}"]`).click()
+  await page.getByRole('button', { name: 'Unarchive', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await page.getByTestId('toggle-archived').click() // hide archived again
+  await expect(page.locator(`[data-story-title="${TITLE}"]`)).toBeVisible()
+})
+
+test('archiving an epic hides it, and its tasks inherit the archive', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Epics', exact: true }).click()
+  const epic = page.locator('div.card').filter({ hasText: 'Performance pass' }).first()
+  await epic.hover()
+  await epic.getByRole('button', { name: 'Archive', exact: true }).click()
+  await expect(page.getByText('Performance pass')).toHaveCount(0)
+
+  // A task in that epic is now archived (inherited) — hidden on the board.
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await showAllAssignees(page)
+  await expect(page.locator('[data-story-title="Profile the slow dashboard query"]')).toHaveCount(0)
+  await page.getByTestId('toggle-archived').click()
+  await expect(page.locator('[data-story-title="Profile the slow dashboard query"]')).toBeVisible()
+
+  // Unarchive the epic to restore.
+  await page.getByRole('link', { name: 'Epics', exact: true }).click()
+  await page.getByTestId('toggle-archived').click()
+  const epic2 = page.locator('div.card').filter({ hasText: 'Performance pass' }).first()
+  await epic2.hover()
+  await epic2.getByRole('button', { name: 'Unarchive', exact: true }).click()
+})
+
 // Runs LAST: imports the full Airtable base into the (separate) mamamia workspace.
 // Uses creds from the environment so the token is never committed; skips if absent.
 const AT_TOKEN = process.env.AIRTABLE_TOKEN

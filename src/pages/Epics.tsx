@@ -6,8 +6,9 @@ import { Avatar } from '@/components/Avatar'
 import { EpicStatusBadge } from '@/components/Badges'
 import { EmptyState, ErrorState, Spinner } from '@/components/States'
 import { EpicModal } from '@/modals/EpicModal'
-import { useDeleteEpic, useEpics, useStories } from '@/lib/api'
-import { epicProgress, pct } from '@/lib/format'
+import { ArchiveToggle, ArchivedTag } from '@/components/Archive'
+import { useDeleteEpic, useEpics, useStories, useUpdateEpic } from '@/lib/api'
+import { epicProgress, isArchived, pct } from '@/lib/format'
 import type { Epic, EpicFull } from '@/lib/types'
 
 export function Epics() {
@@ -15,8 +16,12 @@ export function Epics() {
   const { data: stories = [] } = useStories()
   const [newOpen, setNewOpen] = useState(false)
   const [edit, setEdit] = useState<Epic | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
   const del = useDeleteEpic()
+  const update = useUpdateEpic()
   const location = useLocation()
+
+  const visible = (epics ?? []).filter((e) => showArchived || !isArchived(e))
 
   useEffect(() => {
     if ((location.state as { quickCreate?: string } | null)?.quickCreate === 'epic') {
@@ -31,9 +36,12 @@ export function Epics() {
         title="Epics"
         subtitle="Bodies of work, each linked to the objective it serves."
         action={
-          <button className="btn btn-primary" onClick={() => setNewOpen(true)}>
-            + New epic
-          </button>
+          <div className="flex items-center gap-2">
+            <ArchiveToggle on={showArchived} onChange={setShowArchived} />
+            <button className="btn btn-primary" onClick={() => setNewOpen(true)}>
+              + New epic
+            </button>
+          </div>
         }
       />
       <div className="flex-1 overflow-y-auto px-7 py-6">
@@ -53,14 +61,16 @@ export function Epics() {
           />
         ) : (
           <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-2">
-            {epics!.map((epic) => {
+            {visible.map((epic) => {
               const prog = epicProgress(epic.id, stories)
+              const archived = isArchived(epic)
               return (
-                <div key={epic.id} className="card group p-4">
+                <div key={epic.id} className={`card group p-4 ${archived ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: epic.color }} />
                       <h3 className="truncate text-sm font-semibold text-zinc-900">{epic.title}</h3>
+                      {archived && <ArchivedTag />}
                     </div>
                     <EpicStatusBadge status={epic.status} />
                   </div>
@@ -78,6 +88,12 @@ export function Epics() {
                     <ObjectiveLink epic={epic} />
                     <div className="flex items-center gap-1">
                       <Avatar profile={epic.owner} size={22} />
+                      <button
+                        className="btn btn-ghost px-1.5 text-xs opacity-0 transition group-hover:opacity-100"
+                        onClick={() => update.mutate({ id: epic.id, archived_at: archived ? null : new Date().toISOString() })}
+                      >
+                        {archived ? 'Unarchive' : 'Archive'}
+                      </button>
                       <button className="btn btn-ghost px-1.5 text-xs opacity-0 transition group-hover:opacity-100" onClick={() => setEdit(epic)}>
                         Edit
                       </button>

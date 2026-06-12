@@ -19,7 +19,8 @@ import {
   useTaskStatuses,
   useUpdateStory,
 } from '@/lib/api'
-import { displayName, humanizeStatus, timeAgo } from '@/lib/format'
+import { ArchivedTag } from './Archive'
+import { displayName, humanizeStatus, isStoryArchived, timeAgo } from '@/lib/format'
 import {
   STORY_PRIORITY,
   type Activity,
@@ -70,8 +71,17 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
       ) : (
         <>
           <header className="flex items-center justify-between border-b border-zinc-100 px-5 py-3">
-            <span className="font-mono text-xs text-zinc-400">NS-{story.ref}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-zinc-400">NS-{story.ref}</span>
+              {isStoryArchived(story) && <ArchivedTag />}
+            </div>
             <div className="flex items-center gap-1">
+              <button
+                className="btn btn-ghost px-2 text-xs"
+                onClick={() => set({ archived_at: story.archived_at ? null : new Date().toISOString() })}
+              >
+                {story.archived_at ? 'Unarchive' : 'Archive'}
+              </button>
               <button
                 className="btn btn-ghost px-2 text-xs"
                 onClick={() => {

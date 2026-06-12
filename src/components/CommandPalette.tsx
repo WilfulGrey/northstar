@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
+import { isArchived, isStoryArchived } from '@/lib/format'
 
 interface Cmd {
   id: string
   label: string
   hint: string
   run: () => void
+  archived?: boolean
 }
 
 export const CMDK_EVENT = 'northstar:cmdk'
@@ -67,15 +69,17 @@ export function CommandPalette() {
 
     const found: Cmd[] = []
     if (q) {
-      objectives.filter((o) => match(o.title)).slice(0, 5).forEach((o) =>
-        found.push({ id: `o-${o.id}`, label: o.title, hint: 'Objective', run: () => go('/okrs', { openObjective: o.id }) }),
+      objectives.filter((o) => match(o.title)).slice(0, 6).forEach((o) =>
+        found.push({ id: `o-${o.id}`, label: o.title, hint: 'Objective', archived: isArchived(o), run: () => go('/okrs', { openObjective: o.id }) }),
       )
-      epics.filter((e) => match(e.title)).slice(0, 5).forEach((e) =>
-        found.push({ id: `e-${e.id}`, label: e.title, hint: 'Epic', run: () => go('/epics') }),
+      epics.filter((e) => match(e.title)).slice(0, 6).forEach((e) =>
+        found.push({ id: `e-${e.id}`, label: e.title, hint: 'Epic', archived: isArchived(e), run: () => go('/epics') }),
       )
-      stories.filter((s) => match(s.title)).slice(0, 6).forEach((s) =>
-        found.push({ id: `s-${s.id}`, label: s.title, hint: `Story · NS-${s.ref}`, run: () => go(`/board?story=NS-${s.ref}`) }),
+      stories.filter((s) => match(s.title)).slice(0, 8).forEach((s) =>
+        found.push({ id: `s-${s.id}`, label: s.title, hint: `Story · NS-${s.ref}`, archived: isStoryArchived(s), run: () => go(`/board?story=NS-${s.ref}`) }),
       )
+      // Archived results rank after active ones.
+      found.sort((a, b) => Number(!!a.archived) - Number(!!b.archived))
     }
     return [...actions.filter((a) => match(a.label)), ...found]
   }, [query, objectives, epics, stories]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -119,13 +123,13 @@ export function CommandPalette() {
               <li key={c.id} role="option" aria-selected={i === sel}>
                 <button
                   className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm ${
-                    i === sel ? 'bg-indigo-50 text-indigo-900' : 'text-zinc-700 hover:bg-zinc-50'
-                  }`}
+                    i === sel ? 'bg-indigo-50' : 'hover:bg-zinc-50'
+                  } ${c.archived ? 'text-zinc-400' : i === sel ? 'text-indigo-900' : 'text-zinc-700'}`}
                   onMouseEnter={() => setSel(i)}
                   onClick={() => c.run()}
                 >
                   <span className="truncate">{c.label}</span>
-                  <span className="shrink-0 text-xs text-zinc-400">{c.hint}</span>
+                  <span className="shrink-0 text-xs text-zinc-400">{c.archived ? `${c.hint} · archived` : c.hint}</span>
                 </button>
               </li>
             ))

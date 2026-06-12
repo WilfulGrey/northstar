@@ -6,8 +6,9 @@ import { PriorityIcon } from '@/components/Badges'
 import { EmptyState, ErrorState, Spinner } from '@/components/States'
 import { StoryDetail } from '@/components/StoryDetail'
 import { useAuth } from '@/auth/AuthProvider'
+import { ArchiveToggle } from '@/components/Archive'
 import { useEpics, useObjectives, useStories, useTaskStatuses } from '@/lib/api'
-import { epicAlignmentMap, humanizeStatus, isActiveStory, isStoryAligned, objectiveProgress } from '@/lib/format'
+import { epicAlignmentMap, humanizeStatus, isActiveStory, isStoryAligned, isStoryArchived, objectiveProgress } from '@/lib/format'
 import type { StoryFull } from '@/lib/types'
 
 export function MyWork() {
@@ -17,12 +18,16 @@ export function MyWork() {
   const { data: objectives = [] } = useObjectives()
   const { data: statuses = [] } = useTaskStatuses()
   const [openId, setOpenId] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
 
   const uid = profile?.id
   const stories = storiesQ.data ?? []
   const epicAligned = useMemo(() => epicAlignmentMap(epics), [epics])
 
-  const mine = useMemo(() => stories.filter((s) => s.assignee_id === uid), [stories, uid])
+  const mine = useMemo(
+    () => stories.filter((s) => s.assignee_id === uid && (showArchived || !isStoryArchived(s))),
+    [stories, uid, showArchived],
+  )
   const groups = useMemo(() => {
     const map = new Map<string, StoryFull[]>()
     for (const s of mine) {
@@ -45,7 +50,11 @@ export function MyWork() {
 
   return (
     <>
-      <PageHeader title="My Work" subtitle="Everything assigned to you, and the goals you own." />
+      <PageHeader
+        title="My Work"
+        subtitle="Everything assigned to you, and the goals you own."
+        action={<ArchiveToggle on={showArchived} onChange={setShowArchived} />}
+      />
       <div className="flex-1 overflow-y-auto px-7 py-6">
         {storiesQ.isLoading ? (
           <Spinner />

@@ -45,6 +45,7 @@ export interface Objective {
   owner_id: string | null
   status: string | null
   airtable_id?: string | null
+  archived_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -60,6 +61,7 @@ export interface KeyResult {
   unit: string | null
   status: string | null
   airtable_id?: string | null
+  archived_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -74,6 +76,7 @@ export interface Epic {
   owner_id: string | null
   color: string
   airtable_id?: string | null
+  archived_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -126,6 +129,7 @@ export interface Story {
   assignee_id: string | null
   position: number
   airtable_id?: string | null
+  archived_at?: string | null
   created_at: string
   updated_at: string
   completed_at: string | null
@@ -146,7 +150,7 @@ export interface EpicFull extends Epic {
 }
 
 export interface StoryFull extends Story {
-  epic: Pick<Epic, 'id' | 'title' | 'color' | 'objective_id'> | null
+  epic: Pick<Epic, 'id' | 'title' | 'color' | 'objective_id' | 'archived_at'> | null
   assignee: Profile | null
   key_result: Pick<KeyResult, 'id' | 'title'> | null
   status_info: Pick<TaskStatus, 'name' | 'category' | 'color' | 'position'> | null

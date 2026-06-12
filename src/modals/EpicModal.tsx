@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Modal } from '@/components/Modal'
+import { ArchivedTag } from '@/components/Archive'
 import { useCreateEpic, useObjectives, useProfiles, useUpdateEpic } from '@/lib/api'
 import { EPIC_STATUS, type Epic } from '@/lib/types'
 import { displayName } from '@/lib/format'
@@ -65,6 +66,12 @@ export function EpicModal({ open, onClose, epic }: { open: boolean; onClose: () 
       }
     >
       <div className="space-y-4">
+        {epic?.archived_at && (
+          <div className="flex items-center justify-between rounded-md bg-zinc-50 px-3 py-2">
+            <ArchivedTag />
+            <span className="text-xs text-zinc-400">Its tasks are archived too.</span>
+          </div>
+        )}
         <div>
           <label className="label">Epic</label>
           <div className="flex items-center gap-2">
