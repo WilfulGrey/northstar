@@ -94,16 +94,20 @@ export function Team() {
 }
 
 function MemberAction({ member, onInvite, pending }: { member: Profile; onInvite: () => void; pending: boolean }) {
-  if (member.auth_user_id) {
-    return <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500">Can sign in</span>
-  }
   if (!member.email) {
     return <span className="shrink-0 text-xs text-zinc-300">No email</span>
   }
+  // Members who can already sign in get a "Reset access" link (a fresh invite
+  // link they use to set a new password); contacts get "Invite".
   return (
-    <button className="btn btn-secondary shrink-0 text-xs" onClick={onInvite} disabled={pending}>
-      Invite
-    </button>
+    <div className="flex shrink-0 items-center gap-2">
+      {member.auth_user_id && (
+        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500">Can sign in</span>
+      )}
+      <button className="btn btn-secondary text-xs" onClick={onInvite} disabled={pending}>
+        {member.auth_user_id ? 'Reset access' : 'Invite'}
+      </button>
+    </div>
   )
 }
 
