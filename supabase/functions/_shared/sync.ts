@@ -45,6 +45,7 @@ export interface SyncSummary {
   key_results: { created: number; updated: number; total: number; skipped: number }
   epics: { created: number; updated: number; total: number }
   stories: { created: number; updated: number; total: number }
+  comments: { created: number; updated: number; total: number; skipped: number }
 }
 
 export async function syncWorkspace(
@@ -217,12 +218,36 @@ export async function syncWorkspace(
     }
   })
   await upsert('stories', stRows)
+  const storyByAt = await idMap('stories')
+
+  // ---- Comments (need stories + people first) ----
+  let coSummary = { created: 0, updated: 0, total: 0, skipped: 0 }
+  const T_COMMENTS = byName('Comments')?.id
+  if (T_COMMENTS) {
+    const before = await existing('comments')
+    const recs = await fetchAll(T_COMMENTS, ['Comment Text', 'Komentarz', 'Author', 'Related Task', 'Created Time'])
+    let skipped = 0
+    const rows: Record<string, unknown>[] = []
+    for (const r of recs) {
+      const story = storyByAt.get(first(r.fields['Related Task']) ?? '')
+      const body = String(r.fields['Comment Text'] ?? r.fields['Komentarz'] ?? '').trim()
+      if (!story || !body) { skipped++; continue } // story_id + body are required
+      rows.push({
+        workspace_id: W, airtable_id: r.id, story_id: story.id, body,
+        author_id: teamByAt.get(first(r.fields['Author']) ?? '') ?? null,
+        created_at: (r.fields['Created Time'] as string) ?? undefined,
+      })
+    }
+    await upsert('comments', rows)
+    coSummary = { ...tally(before, rows as { airtable_id: string }[]), skipped }
+  }
 
   const now = new Date().toISOString()
   await db.from('workspaces').update({ airtable_base_id: baseId, last_sync_at: now }).eq('id', W)
 
   return {
     ms: Date.now() - started, statuses: names.length, people: teamByAt.size,
-    objectives: objSummary, key_results: krSummary, epics: epSummary, stories: tally(before, stRows),
+    objectives: objSummary, key_results: krSummary, epics: epSummary,
+    stories: tally(before, stRows), comments: coSummary,
   }
 }
