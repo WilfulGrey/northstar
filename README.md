@@ -110,9 +110,14 @@ results, 71 epics, 1220 tasks in ~5s.**
   `pg_net` calls the `sync-cron` Edge Function (no JWT, guarded by `x-sync-secret`) → it
   syncs every connected workspace using its stored token. "Sync now" on the Integrations
   page triggers the same core on demand.
+- **Task comments** (Airtable's native record comments) are crawled separately by
+  `sync-comments` — per-record + rate-limited, so it walks a window of tasks per run
+  (cursor in `workspace_integrations`), scheduled every ~5 min; over a few runs it covers
+  the whole base, then loops to stay fresh. Authors are matched to members by email.
 - One-way (Airtable → Northstar), upsert by `(workspace_id, airtable_id)` — adds/updates,
   doesn't delete. Edge Functions: `sync-airtable` (connect + manual), `sync-cron`
-  (scheduled), `disconnect-airtable`; shared core in `supabase/functions/_shared/sync.ts`.
+  (scheduled), `sync-comments` (scheduled), `disconnect-airtable`; shared core in
+  `supabase/functions/_shared/sync.ts`.
 
 ### Background sync setup
 

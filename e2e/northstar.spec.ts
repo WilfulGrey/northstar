@@ -346,7 +346,6 @@ test('connects Airtable server-side and syncs into the workspace', async ({ page
   await page.getByRole('button', { name: 'Connect & sync from Airtable', exact: true }).click()
   await expect(page.getByTestId('sync-result')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('sync-result')).toContainText(/people/)
-  await expect(page.getByTestId('sync-result')).toContainText('Comments') // comments are imported too
 
   // The token is now stored server-side for the whole workspace; "Sync now"
   // would reuse it (verified separately) — kept light here to avoid two

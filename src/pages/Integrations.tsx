@@ -110,13 +110,13 @@ export function Integrations() {
                 <p className="text-sm font-medium text-emerald-800">
                   Synced in {(result.ms / 1000).toFixed(1)}s · {result.statuses} statuses · {result.people} people
                 </p>
-                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <Tile label="Objectives" r={result.objectives} />
                   <Tile label="Key results" r={result.key_results} />
                   <Tile label="Epics" r={result.epics} />
                   <Tile label="Stories" r={result.stories} />
-                  <Tile label="Comments" r={result.comments} />
                 </div>
+                <p className="mt-2 text-xs text-zinc-400">Task comments import in the background (a few minutes).</p>
               </div>
             )}
           </div>

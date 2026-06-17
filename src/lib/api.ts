@@ -321,7 +321,6 @@ export interface SyncResult {
   key_results: { created: number; updated: number; total: number; skipped: number }
   epics: { created: number; updated: number; total: number }
   stories: { created: number; updated: number; total: number }
-  comments: { created: number; updated: number; total: number; skipped: number }
 }
 // Pass { token, baseId } to connect; pass nothing to sync with the stored token.
 export function useSyncAirtable() {
