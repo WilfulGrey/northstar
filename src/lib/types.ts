@@ -105,6 +105,18 @@ export interface Comment {
   author?: Profile | null
 }
 
+export interface Attachment {
+  id: string
+  story_id: string | null
+  comment_id: string | null
+  uploaded_by: string | null
+  path: string
+  file_name: string
+  mime_type: string | null
+  size_bytes: number | null
+  created_at: string
+}
+
 export interface Activity {
   id: string
   story_id: string

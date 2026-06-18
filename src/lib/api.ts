@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { supabase } from './supabase'
 import type {
   Activity,
+  Attachment,
   CheckinConfidence,
   Comment,
   Cycle,
@@ -28,6 +29,7 @@ export const keys = {
   comments: (storyId: string) => ['comments', storyId] as const,
   activity: (storyId: string) => ['activity', storyId] as const,
   checkins: (krId: string) => ['checkins', krId] as const,
+  attachments: (storyId: string) => ['attachments', storyId] as const,
 }
 
 function throwOnError<T>({ data, error }: { data: T | null; error: { message: string } | null }): T {
@@ -408,6 +410,58 @@ export function useDeleteComment(storyId: string) {
   })
 }
 
+// Attachments — images & files on a story or one of its comments.
+export function useAttachments(storyId: string) {
+  return useQuery({
+    queryKey: keys.attachments(storyId),
+    queryFn: async () =>
+      throwOnError<Attachment[]>(
+        await supabase.from('attachments').select('*').eq('story_id', storyId).order('created_at', { ascending: true }),
+      ),
+  })
+}
+
+export function useUploadAttachment(storyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: { file: File; commentId?: string | null; workspaceId: string; uploadedBy: string }) => {
+      const { file, commentId, workspaceId, uploadedBy } = input
+      const path = `${workspaceId}/${crypto.randomUUID()}`
+      const up = await supabase.storage.from('attachments').upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: false,
+      })
+      if (up.error) throw new Error(up.error.message)
+      return throwOnError<Attachment>(
+        await supabase.from('attachments').insert({
+          story_id: storyId, comment_id: commentId ?? null, uploaded_by: uploadedBy,
+          path, file_name: file.name, mime_type: file.type || null, size_bytes: file.size,
+        }).select().single(),
+      )
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.attachments(storyId) }),
+  })
+}
+
+export function useDeleteAttachment(storyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (att: { id: string; path: string }) => {
+      await supabase.storage.from('attachments').remove([att.path])
+      throwOnError(await supabase.from('attachments').delete().eq('id', att.id))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.attachments(storyId) }),
+  })
+}
+
+/** Signed URLs (1h) for storage paths, keyed by path. */
+export async function signedUrls(paths: string[]): Promise<Map<string, string>> {
+  if (!paths.length) return new Map()
+  const { data, error } = await supabase.storage.from('attachments').createSignedUrls(paths, 3600)
+  if (error) throw new Error(error.message)
+  return new Map((data ?? []).filter((d) => d.signedUrl).map((d) => [d.path as string, d.signedUrl as string]))
+}
+
 /**
  * Drop embedded relations and undefined values before writing — the select
  * helpers return nested objects (owner, epic, ...) that aren't real columns.
@@ -441,6 +495,7 @@ export function useRealtimeSync() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'objectives' }, () => invalidate(qc, keys.objectives))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'key_results' }, () => invalidate(qc, keys.objectives))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => invalidate(qc, ['comments']))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attachments' }, () => invalidate(qc, ['attachments']))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity' }, () => invalidate(qc, ['activity']))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kr_checkins' }, () => {
         invalidate(qc, ['checkins'])

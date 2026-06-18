@@ -8,7 +8,9 @@ import {
   keys,
   useActivity,
   useAddComment,
+  useAttachments,
   useComments,
+  useDeleteAttachment,
   useDeleteComment,
   useDeleteStory,
   useEpics,
@@ -18,12 +20,15 @@ import {
   useStory,
   useTaskStatuses,
   useUpdateStory,
+  useUploadAttachment,
 } from '@/lib/api'
 import { ArchivedTag } from './Archive'
+import { AttachButton, AttachmentList, filesFromEvent } from './Attachments'
 import { displayName, humanizeStatus, isStoryArchived, timeAgo } from '@/lib/format'
 import {
   STORY_PRIORITY,
   type Activity,
+  type Attachment,
   type Comment,
   type Profile,
   type StoryPriority,
@@ -39,9 +44,35 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
   const update = useUpdateStory()
   const del = useDeleteStory()
   const qc = useQueryClient()
+  const { profile } = useAuth()
+  const { data: attachments = [] } = useAttachments(storyId)
+  const upload = useUploadAttachment(storyId)
+  const delAtt = useDeleteAttachment(storyId)
   const [copied, setCopied] = useState(false)
 
   const story = stories?.find((s) => s.id === storyId) ?? null
+
+  const storyAttachments = useMemo(() => attachments.filter((a) => a.comment_id == null), [attachments])
+  const attByComment = useMemo(() => {
+    const m = new Map<string, Attachment[]>()
+    for (const a of attachments) {
+      if (!a.comment_id) continue
+      if (!m.has(a.comment_id)) m.set(a.comment_id, [])
+      m.get(a.comment_id)!.push(a)
+    }
+    return m
+  }, [attachments])
+
+  async function uploadFiles(files: File[], commentId: string | null) {
+    if (!profile?.workspace_id || !files.length) return
+    for (const file of files) {
+      try {
+        await upload.mutateAsync({ file, commentId, workspaceId: profile.workspace_id, uploadedBy: profile.id })
+      } catch (e) {
+        alert(`Upload failed: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+  }
 
   // If the story disappears (deleted), close the drawer.
   useEffect(() => {
@@ -184,7 +215,14 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
                 className="input min-h-[80px] resize-y"
                 defaultValue={full?.description ?? ''}
                 key={`desc-${story.id}-${full ? 'loaded' : 'loading'}`}
-                placeholder="As a … I want … so that …"
+                placeholder="As a … I want … so that …  (paste an image to attach)"
+                onPaste={(e) => {
+                  const files = filesFromEvent(e)
+                  if (files.length) {
+                    e.preventDefault()
+                    void uploadFiles(files, null)
+                  }
+                }}
                 onBlur={(e) => {
                   const v = e.target.value.trim() || null
                   if (v !== (full?.description ?? null)) set({ description: v })
@@ -192,7 +230,29 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
               />
             </div>
 
-            <Timeline storyId={story.id} profilesById={profilesById} epicsById={epicsById} />
+            <div className="mt-4">
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="label mb-0">Attachments</p>
+                <AttachButton onFiles={(f) => void uploadFiles(f, null)} disabled={upload.isPending} />
+              </div>
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  void uploadFiles(filesFromEvent(e), null)
+                }}
+                className="rounded-lg border border-dashed border-zinc-200 p-3"
+              >
+                {storyAttachments.length ? (
+                  <AttachmentList items={storyAttachments} onDelete={(a) => delAtt.mutate({ id: a.id, path: a.path })} />
+                ) : (
+                  <p className="text-center text-xs text-zinc-400">Drop files or paste an image — images, PDF, CSV…</p>
+                )}
+                {upload.isPending && <p className="mt-2 text-xs text-zinc-400">Uploading…</p>}
+              </div>
+            </div>
+
+            <Timeline storyId={story.id} profilesById={profilesById} epicsById={epicsById} attByComment={attByComment} />
           </div>
 
           <Composer storyId={story.id} />
@@ -210,10 +270,12 @@ function Timeline({
   storyId,
   profilesById,
   epicsById,
+  attByComment,
 }: {
   storyId: string
   profilesById: Map<string, Profile>
   epicsById: Map<string, { title: string }>
+  attByComment: Map<string, Attachment[]>
 }) {
   const { data: comments = [], isLoading: lc } = useComments(storyId)
   const { data: activity = [], isLoading: la } = useActivity(storyId)
@@ -252,7 +314,14 @@ function Timeline({
                       </button>
                     )}
                   </div>
-                  <p className="mt-0.5 whitespace-pre-wrap rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">{it.data.body}</p>
+                  {it.data.body && (
+                    <p className="mt-0.5 whitespace-pre-wrap rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">{it.data.body}</p>
+                  )}
+                  {attByComment.get(it.data.id)?.length ? (
+                    <div className="mt-1.5">
+                      <AttachmentList items={attByComment.get(it.data.id)!} />
+                    </div>
+                  ) : null}
                 </div>
               </li>
             ) : (
@@ -272,32 +341,74 @@ function Timeline({
 function Composer({ storyId }: { storyId: string }) {
   const { profile } = useAuth()
   const add = useAddComment(storyId)
+  const upload = useUploadAttachment(storyId)
   const [body, setBody] = useState('')
+  const [pending, setPending] = useState<File[]>([])
+  const busy = add.isPending || upload.isPending
+
+  const addFiles = (files: File[]) => files.length && setPending((p) => [...p, ...files])
 
   async function submit() {
     const text = body.trim()
-    if (!text || !profile) return
-    await add.mutateAsync({ body: text, author_id: profile.id })
+    if ((!text && !pending.length) || !profile || busy) return
+    const comment = (await add.mutateAsync({ body: text, author_id: profile.id })) as unknown as { id: string } | null
+    if (pending.length && profile.workspace_id && comment?.id) {
+      for (const file of pending) {
+        try {
+          await upload.mutateAsync({ file, commentId: comment.id, workspaceId: profile.workspace_id, uploadedBy: profile.id })
+        } catch {
+          // best effort; the comment is already posted
+        }
+      }
+    }
     setBody('')
+    setPending([])
   }
 
   return (
-    <div className="flex items-start gap-2.5 border-t border-zinc-100 px-5 py-3">
+    <div
+      className="flex items-start gap-2.5 border-t border-zinc-100 px-5 py-3"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault()
+        addFiles(filesFromEvent(e))
+      }}
+    >
       <Avatar profile={profile} size={26} />
       <div className="flex-1">
         <textarea
           aria-label="Add a comment"
           className="input min-h-[40px] resize-y"
-          placeholder="Leave a comment…"
+          placeholder="Leave a comment… (paste or drop files to attach)"
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onPaste={(e) => {
+            const files = filesFromEvent(e)
+            if (files.length) {
+              e.preventDefault()
+              addFiles(files)
+            }
+          }}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void submit()
           }}
         />
-        <div className="mt-2 flex justify-end">
-          <button className="btn btn-primary" onClick={() => void submit()} disabled={!body.trim() || add.isPending}>
-            Comment
+        {pending.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {pending.map((f, i) => (
+              <span key={i} className="inline-flex items-center gap-1 rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                📎 <span className="max-w-[140px] truncate">{f.name}</span>
+                <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => setPending((p) => p.filter((_, j) => j !== i))}>
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="mt-2 flex items-center justify-between">
+          <AttachButton onFiles={addFiles} disabled={busy} />
+          <button className="btn btn-primary" onClick={() => void submit()} disabled={(!body.trim() && !pending.length) || busy}>
+            {busy ? 'Posting…' : 'Comment'}
           </button>
         </div>
       </div>

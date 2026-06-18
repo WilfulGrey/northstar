@@ -324,6 +324,18 @@ test('archiving an epic hides it, and its tasks inherit the archive', async ({ p
   await epic2.getByRole('button', { name: 'Unarchive', exact: true }).click()
 })
 
+test('attaches a file to a task', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await page.locator('[data-story-title="Postmortem template & on-call rota"]').click()
+
+  // The first hidden file input belongs to the task's Attachments section.
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: 'spec.csv', mimeType: 'text/csv', buffer: Buffer.from('a,b\n1,2\n'),
+  })
+  await expect(page.locator('[data-testid="attachment"][data-file-name="spec.csv"]')).toBeVisible({ timeout: 15_000 })
+})
+
 // Runs LAST: imports the full Airtable base into the (separate) mamamia workspace.
 // Uses creds from the environment so the token is never committed; skips if absent.
 const AT_TOKEN = process.env.AIRTABLE_TOKEN
