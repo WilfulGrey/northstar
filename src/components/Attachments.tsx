@@ -16,7 +16,15 @@ function fileIcon(mime: string | null): string {
   return '📄'
 }
 
-export function AttachmentList({ items, onDelete }: { items: Attachment[]; onDelete?: (a: Attachment) => void }) {
+export function AttachmentList({
+  items,
+  onDelete,
+  large,
+}: {
+  items: Attachment[]
+  onDelete?: (a: Attachment) => void
+  large?: boolean // render images at column width (used in comments)
+}) {
   const [urls, setUrls] = useState<Map<string, string>>(new Map())
   const pathsKey = useMemo(() => items.map((i) => i.path).join(','), [items])
 
@@ -33,18 +41,26 @@ export function AttachmentList({ items, onDelete }: { items: Attachment[]; onDel
 
   if (!items.length) return null
   return (
-    <div className="flex flex-wrap gap-2" data-testid="attachment-list">
+    <div className={large ? 'flex flex-col items-start gap-2' : 'flex flex-wrap gap-2'} data-testid="attachment-list">
       {items.map((a) => {
         const url = urls.get(a.path)
         const isImg = (a.mime_type ?? '').startsWith('image/')
         return (
           <div key={a.id} className="group relative" data-testid="attachment" data-file-name={a.file_name}>
             {isImg ? (
-              <a href={url} target="_blank" rel="noreferrer" title={a.file_name}>
+              <a href={url} target="_blank" rel="noreferrer" title={`${a.file_name} — open full size`}>
                 {url ? (
-                  <img src={url} alt={a.file_name} className="h-20 w-20 rounded-md border border-zinc-200 object-cover" />
+                  <img
+                    src={url}
+                    alt={a.file_name}
+                    className={
+                      large
+                        ? 'max-h-[480px] max-w-full rounded-md border border-zinc-200'
+                        : 'h-20 w-20 rounded-md border border-zinc-200 object-cover'
+                    }
+                  />
                 ) : (
-                  <div className="h-20 w-20 animate-pulse rounded-md bg-zinc-100" />
+                  <div className={`${large ? 'h-40 w-64' : 'h-20 w-20'} animate-pulse rounded-md bg-zinc-100`} />
                 )}
               </a>
             ) : (

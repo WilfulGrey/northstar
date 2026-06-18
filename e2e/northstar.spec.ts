@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { deflateSync } from 'node:zlib'
 
 const OBJECTIVE_DAILY = "Make Northstar the team's daily driver"
 
@@ -324,17 +325,67 @@ test('archiving an epic hides it, and its tasks inherit the archive', async ({ p
   await epic2.getByRole('button', { name: 'Unarchive', exact: true }).click()
 })
 
-test('attaches a file to a task', async ({ page }) => {
+test('attaches files to a task and shows comment images full-width', async ({ page }) => {
   await login(page)
   await page.getByRole('link', { name: 'Board', exact: true }).click()
   await page.locator('[data-story-title="Postmortem template & on-call rota"]').click()
 
-  // The first hidden file input belongs to the task's Attachments section.
+  // Task attachment — the first hidden file input belongs to the task's Attachments section.
   await page.locator('input[type="file"]').first().setInputFiles({
     name: 'spec.csv', mimeType: 'text/csv', buffer: Buffer.from('a,b\n1,2\n'),
   })
   await expect(page.locator('[data-testid="attachment"][data-file-name="spec.csv"]')).toBeVisible({ timeout: 15_000 })
+
+  // Comment with an image — rendered with the full-width ("large") style, not an 80px thumbnail.
+  const png = wideRedPng()
+  await page.getByLabel('Add a comment').fill('screenshot below')
+  await page.locator('input[type="file"]').nth(1).setInputFiles({
+    name: 'shot.png', mimeType: 'image/png', buffer: png,
+  })
+  await page.getByRole('button', { name: 'Comment', exact: true }).click()
+  const img = page.locator('[data-testid="comment"] [data-testid="attachment"][data-file-name="shot.png"] img')
+  await expect(img).toBeVisible({ timeout: 15_000 })
+  await expect(img).toHaveClass(/max-w-full/) // full-width comment image, not w-20 thumbnail
+  // Once the 600px-wide PNG loads it fills the comment column (poll past load/layout).
+  await expect.poll(async () => (await img.boundingBox())?.width ?? 0, { timeout: 10_000 }).toBeGreaterThan(300)
 })
+
+// A 600x80 solid-red PNG, encoded by hand (no deps) so the comment image has real width.
+function wideRedPng(): Buffer {
+  const W = 600, H = 80
+  const raw = Buffer.alloc((W * 3 + 1) * H)
+  for (let y = 0; y < H; y++) {
+    const row = y * (W * 3 + 1)
+    raw[row] = 0 // filter: none
+    for (let x = 0; x < W; x++) {
+      const p = row + 1 + x * 3
+      raw[p] = 220; raw[p + 1] = 70; raw[p + 2] = 70
+    }
+  }
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length)
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data])
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body) >>> 0)
+    return Buffer.concat([len, body, crc])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4)
+  ihdr[8] = 8; ihdr[9] = 2 // 8-bit, truecolor RGB
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
+}
+function crc32(buf: Buffer): number {
+  let c = ~0
+  for (let i = 0; i < buf.length; i++) {
+    c ^= buf[i]
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1))
+  }
+  return ~c
+}
 
 // Runs LAST: imports the full Airtable base into the (separate) mamamia workspace.
 // Uses creds from the environment so the token is never committed; skips if absent.

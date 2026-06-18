@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Drawer } from './Drawer'
 import { Avatar } from './Avatar'
@@ -49,6 +49,8 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
   const upload = useUploadAttachment(storyId)
   const delAtt = useDeleteAttachment(storyId)
   const [copied, setCopied] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const dragDepth = useRef(0)
 
   const story = stories?.find((s) => s.id === storyId) ?? null
 
@@ -100,7 +102,37 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
       {!story ? (
         <Spinner />
       ) : (
-        <>
+        <div
+          className="relative flex h-full min-h-0 flex-col"
+          onDragEnter={(e) => {
+            if (!hasFiles(e)) return
+            dragDepth.current += 1
+            setDragging(true)
+          }}
+          onDragOver={(e) => {
+            if (hasFiles(e)) e.preventDefault()
+          }}
+          onDragLeave={() => {
+            dragDepth.current = Math.max(0, dragDepth.current - 1)
+            if (dragDepth.current === 0) setDragging(false)
+          }}
+          onDrop={(e) => {
+            if (!hasFiles(e)) return
+            e.preventDefault()
+            dragDepth.current = 0
+            setDragging(false)
+            void uploadFiles(filesFromEvent(e), null)
+          }}
+        >
+          {dragging && (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-indigo-50/80 backdrop-blur-[1px]">
+              <div className="rounded-xl border-2 border-dashed border-indigo-400 bg-white/70 px-8 py-6 text-center">
+                <p className="text-2xl">📎</p>
+                <p className="mt-1 text-sm font-semibold text-indigo-700">Drop to attach to this task</p>
+                <p className="text-xs text-indigo-500/80">images, PDF, CSV…</p>
+              </div>
+            </div>
+          )}
           <header className="flex items-center justify-between border-b border-zinc-100 px-5 py-3">
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs text-zinc-400">NS-{story.ref}</span>
@@ -235,18 +267,11 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
                 <p className="label mb-0">Attachments</p>
                 <AttachButton onFiles={(f) => void uploadFiles(f, null)} disabled={upload.isPending} />
               </div>
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  void uploadFiles(filesFromEvent(e), null)
-                }}
-                className="rounded-lg border border-dashed border-zinc-200 p-3"
-              >
+              <div className="rounded-lg border border-dashed border-zinc-200 p-3">
                 {storyAttachments.length ? (
                   <AttachmentList items={storyAttachments} onDelete={(a) => delAtt.mutate({ id: a.id, path: a.path })} />
                 ) : (
-                  <p className="text-center text-xs text-zinc-400">Drop files or paste an image — images, PDF, CSV…</p>
+                  <p className="text-center text-xs text-zinc-400">Drop a file anywhere here, paste an image, or use Attach — images, PDF, CSV…</p>
                 )}
                 {upload.isPending && <p className="mt-2 text-xs text-zinc-400">Uploading…</p>}
               </div>
@@ -256,10 +281,16 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
           </div>
 
           <Composer storyId={story.id} />
-        </>
+        </div>
       )}
     </Drawer>
   )
+}
+
+/** True when a drag/drop event is carrying files (vs. dragging text/selection). */
+function hasFiles(e: { dataTransfer?: DataTransfer | null }): boolean {
+  const types = e.dataTransfer?.types
+  return !!types && Array.from(types).includes('Files')
 }
 
 function PropLabel({ children }: { children: ReactNode }) {
@@ -319,7 +350,7 @@ function Timeline({
                   )}
                   {attByComment.get(it.data.id)?.length ? (
                     <div className="mt-1.5">
-                      <AttachmentList items={attByComment.get(it.data.id)!} />
+                      <AttachmentList items={attByComment.get(it.data.id)!} large />
                     </div>
                   ) : null}
                 </div>
@@ -366,20 +397,13 @@ function Composer({ storyId }: { storyId: string }) {
   }
 
   return (
-    <div
-      className="flex items-start gap-2.5 border-t border-zinc-100 px-5 py-3"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault()
-        addFiles(filesFromEvent(e))
-      }}
-    >
+    <div className="flex items-start gap-2.5 border-t border-zinc-100 px-5 py-3">
       <Avatar profile={profile} size={26} />
       <div className="flex-1">
         <textarea
           aria-label="Add a comment"
           className="input min-h-[40px] resize-y"
-          placeholder="Leave a comment… (paste or drop files to attach)"
+          placeholder="Leave a comment… (paste an image or use Attach)"
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onPaste={(e) => {
