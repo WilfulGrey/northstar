@@ -9,7 +9,7 @@ import { StoryDetail } from '@/components/StoryDetail'
 import { useEpics, useProfiles, useStories, useTaskStatuses, useUpdateStory } from '@/lib/api'
 import { useAuth } from '@/auth/AuthProvider'
 import { ArchiveToggle, ArchivedTag } from '@/components/Archive'
-import { displayName, humanizeStatus, isStoryArchived } from '@/lib/format'
+import { displayName, findByRef, humanizeStatus, isStoryArchived, taskRef } from '@/lib/format'
 import type { StoryFull, TaskStatus } from '@/lib/types'
 
 const NONE = '__none'
@@ -48,9 +48,7 @@ export function Board() {
   useEffect(() => {
     const param = searchParams.get('story')
     if (!param || !stories) return
-    const story = param.toUpperCase().startsWith('NS-')
-      ? stories.find((s) => s.ref === Number(param.slice(3)))
-      : stories.find((s) => s.id === param)
+    const story = findByRef(stories, param) ?? stories.find((s) => s.id === param)
     if (story) setOpenId(story.id)
   }, [searchParams, stories])
 
@@ -102,6 +100,22 @@ export function Board() {
     if ((byStatus.get(NONE)?.length ?? 0) > 0) cols.push({ name: NONE, color: '#d4d4d8' })
     return cols
   }, [statuses, byStatus])
+
+  // Order for the drawer's prev/next chevrons — follow the board's column order
+  // in board view and the list's sort in list view, matching what's on screen.
+  const navIds = useMemo(() => {
+    if (view === 'list') {
+      const pos = new Map(statuses.map((s) => [s.name, s.position]))
+      return [...filtered]
+        .sort((a, b) => {
+          const pa = a.status ? pos.get(a.status) ?? 999 : 1000
+          const pb = b.status ? pos.get(b.status) ?? 999 : 1000
+          return pa - pb || a.ref - b.ref
+        })
+        .map((s) => s.id)
+    }
+    return columns.flatMap((c) => (byStatus.get(c.name) ?? []).map((s) => s.id))
+  }, [view, filtered, statuses, columns, byStatus])
 
   function moveTo(storyId: string, status: string) {
     if (status === NONE) return
@@ -244,7 +258,9 @@ export function Board() {
       </div>
 
       {creating && <StoryModal open defaultStatus={creating} defaultEpicId={epicFilter} onClose={() => setCreating(null)} />}
-      {openId && <StoryDetail storyId={openId} onClose={closeDrawer} />}
+      {openId && (
+        <StoryDetail storyId={openId} onClose={closeDrawer} orderedIds={navIds} onNavigate={setOpenId} />
+      )}
     </>
   )
 }
@@ -281,7 +297,7 @@ function StoryCard({
 
       <div className="mt-2.5 flex items-center justify-between">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="font-mono text-[11px] text-zinc-400">NS-{story.ref}</span>
+          <span className="font-mono text-[11px] text-zinc-400">{taskRef(story)}</span>
           {archived && <ArchivedTag />}
           {story.epic && (
             <span className="inline-flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-zinc-600" style={{ backgroundColor: `${story.epic.color}1a` }}>
@@ -348,7 +364,7 @@ function TasksList({
                   </span>
                 </td>
                 <td className="px-2 py-2.5">
-                  <span className="font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>{' '}
+                  <span className="font-mono text-[11px] text-zinc-400">{taskRef(s)}</span>{' '}
                   <span className="text-zinc-800">{s.title}</span>
                   {isStoryArchived(s) && <ArchivedTag className="ml-2 align-middle" />}
                 </td>

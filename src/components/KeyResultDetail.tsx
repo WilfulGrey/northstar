@@ -6,7 +6,7 @@ import { KrStatusBadge, StoryStatusDot } from './Badges'
 import { Avatar } from './Avatar'
 import { useAuth } from '@/auth/AuthProvider'
 import { useAddCheckin, useEpics, useKrCheckins, useObjectives, useStories } from '@/lib/api'
-import { displayName, formatMetric, keyResultWork, krProgress, pct, timeAgo } from '@/lib/format'
+import { displayName, formatMetric, keyResultWork, krProgress, pct, taskRef, timeAgo } from '@/lib/format'
 import { CHECKIN_CONFIDENCE, type CheckinConfidence, type KeyResult } from '@/lib/types'
 
 export function KeyResultDetail({ keyResult, onClose }: { keyResult: KeyResult; onClose: () => void }) {
@@ -78,7 +78,7 @@ export function KeyResultDetail({ keyResult, onClose }: { keyResult: KeyResult; 
                 <li key={s.id} className="flex items-center gap-3 py-2">
                   <StoryStatusDot status={s.status} color={s.status_info?.color} />
                   <span className="min-w-0 flex-1 truncate text-sm text-zinc-700">{s.title}</span>
-                  <span className="shrink-0 font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-zinc-400">{taskRef(s)}</span>
                 </li>
               ))}
             </ul>

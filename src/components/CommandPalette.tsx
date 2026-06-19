@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
-import { isArchived, isStoryArchived } from '@/lib/format'
+import { isArchived, isStoryArchived, taskRef } from '@/lib/format'
 
 interface Cmd {
   id: string
@@ -76,7 +76,7 @@ export function CommandPalette() {
         found.push({ id: `e-${e.id}`, label: e.title, hint: 'Epic', archived: isArchived(e), run: () => go('/epics') }),
       )
       stories.filter((s) => match(s.title)).slice(0, 8).forEach((s) =>
-        found.push({ id: `s-${s.id}`, label: s.title, hint: `Story · NS-${s.ref}`, archived: isStoryArchived(s), run: () => go(`/board?story=NS-${s.ref}`) }),
+        found.push({ id: `s-${s.id}`, label: s.title, hint: `Story · ${taskRef(s)}`, archived: isStoryArchived(s), run: () => go(`/board?story=${taskRef(s)}`) }),
       )
       // Archived results rank after active ones.
       found.sort((a, b) => Number(!!a.archived) - Number(!!b.archived))

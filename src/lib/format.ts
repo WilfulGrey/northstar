@@ -24,6 +24,30 @@ export const isActiveStory = (s: StatusBearing) => ACTIVE_CATEGORIES.includes(ca
 export const isDoneStory = (s: StatusBearing) => categoryOf(s) === 'done'
 export const isCanceledStory = (s: StatusBearing) => categoryOf(s) === 'canceled'
 
+/**
+ * Canonical task ref shown to users: Mamamia's "Task ID" format, t-<n>.
+ * For synced tasks n is the Airtable "Record ID"; tasks created natively in
+ * Northstar (sandbox seed / quick-create) reuse their local id, still as t-<n>.
+ */
+export function taskRef(s: { mamamia_no?: number | null; ref: number }): string {
+  return `t-${s.mamamia_no ?? s.ref}`
+}
+
+/** Parse a task ref back to a story. Resolves 't-<n>' (Mamamia id, then local
+ *  id) and still understands legacy 'NS-<n>' links. */
+export function findByRef<T extends { mamamia_no?: number | null; ref: number }>(
+  list: T[],
+  ref: string,
+): T | undefined {
+  const m = /^t-(\d+)$/i.exec(ref)
+  if (m) {
+    const n = Number(m[1])
+    return list.find((s) => s.mamamia_no === n) ?? list.find((s) => s.ref === n)
+  }
+  if (/^ns-\d+$/i.test(ref)) return list.find((s) => s.ref === Number(ref.slice(3)))
+  return undefined
+}
+
 /** Human label for a status value: 'in_progress' → 'In progress', raw otherwise. */
 export function humanizeStatus(name: string | null | undefined): string {
   if (!name) return 'No status'

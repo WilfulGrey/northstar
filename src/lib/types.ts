@@ -131,6 +131,7 @@ export interface Activity {
 export interface Story {
   id: string
   ref: number
+  mamamia_no?: number | null // Airtable "Record ID"; shown as Mamamia's "Task ID" (t-<n>)
   title: string
   description: string | null
   status: string | null

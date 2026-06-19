@@ -4,7 +4,7 @@ import { ProgressBar } from './ProgressBar'
 import { Avatar } from './Avatar'
 import { ObjectiveStatusBadge, EpicStatusBadge, StoryStatusDot } from './Badges'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
-import { epicProgress, isCanceledStory, isDoneStory, keyResultWork, krProgress, objectiveProgress, pct } from '@/lib/format'
+import { epicProgress, isCanceledStory, isDoneStory, keyResultWork, krProgress, objectiveProgress, pct, taskRef } from '@/lib/format'
 import type { ObjectiveFull } from '@/lib/types'
 
 export function ObjectiveDetail({ objective, onClose }: { objective: ObjectiveFull; onClose: () => void }) {
@@ -121,7 +121,7 @@ export function ObjectiveDetail({ objective, onClose }: { objective: ObjectiveFu
               <li key={s.id} className="flex items-center gap-3 py-2">
                 <StoryStatusDot status={s.status} color={s.status_info?.color} />
                 <span className="min-w-0 flex-1 truncate text-sm text-zinc-700">{s.title}</span>
-                <span className="shrink-0 font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>
+                <span className="shrink-0 font-mono text-[11px] text-zinc-400">{taskRef(s)}</span>
               </li>
             ))}
           </ul>

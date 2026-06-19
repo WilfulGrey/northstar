@@ -215,13 +215,31 @@ test('a story opens from a shareable deep link', async ({ page }) => {
   await page.getByRole('link', { name: 'Board', exact: true }).click()
   await showAllAssignees(page) // "Add Sentry" is assigned to Leo, not the demo user
 
-  // Discover the NS ref by opening the card, then reload via its deep link.
+  // Discover the task ref by opening the card, then reload via its deep link.
   await page.locator('[data-story-title="Add Sentry error tracking"]').click()
-  const ref = (await page.getByRole('dialog').getByText(/^NS-\d+$/).first().innerText()).trim()
+  const ref = (await page.getByRole('dialog').getByText(/^t-\d+$/).first().innerText()).trim()
   await page.keyboard.press('Escape')
 
   await page.goto(`/board?story=${ref}`)
   await expect(page.getByLabel('Story title')).toHaveValue('Add Sentry error tracking')
+})
+
+test('drawer chevrons step to the next and previous task', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await showAllAssignees(page)
+
+  // Open the first card (top of the board order) → Previous is disabled, Next moves on.
+  await page.locator('[data-testid="story-card"]').first().click()
+  const title = page.getByLabel('Story title')
+  const first = await title.inputValue()
+  await expect(page.getByRole('button', { name: 'Previous task' })).toBeDisabled()
+
+  await page.getByRole('button', { name: 'Next task' }).click()
+  await expect.poll(() => title.inputValue()).not.toBe(first)
+
+  await page.getByRole('button', { name: 'Previous task' }).click()
+  await expect(title).toHaveValue(first)
 })
 
 test('OKR list shows a check-in trend sparkline', async ({ page }) => {

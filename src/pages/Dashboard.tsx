@@ -9,7 +9,7 @@ import { StoryDetail } from '@/components/StoryDetail'
 import { ObjectiveDetail } from '@/components/ObjectiveDetail'
 import { useAuth } from '@/auth/AuthProvider'
 import { useEpics, useObjectives, useStories } from '@/lib/api'
-import { alignment, displayName, epicAlignmentMap, isActiveStory, isArchived, isStoryAligned, isStoryArchived, objectiveProgress, pct } from '@/lib/format'
+import { alignment, displayName, epicAlignmentMap, isActiveStory, isArchived, isStoryAligned, isStoryArchived, objectiveProgress, pct, taskRef } from '@/lib/format'
 import type { ObjectiveFull } from '@/lib/types'
 
 export function Dashboard() {
@@ -131,7 +131,7 @@ export function Dashboard() {
                             >
                               <PriorityIcon priority={s.priority} />
                               <span className="truncate">{s.title}</span>
-                              <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>
+                              <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400">{taskRef(s)}</span>
                             </button>
                           </li>
                         ))}

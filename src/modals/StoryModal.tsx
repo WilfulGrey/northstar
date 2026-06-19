@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/Modal'
 import { useCreateStory, useEpics, useObjectives, useProfiles, useTaskStatuses, useUpdateStory } from '@/lib/api'
 import { STORY_PRIORITY, type StoryFull, type StoryPriority } from '@/lib/types'
-import { displayName, humanizeStatus } from '@/lib/format'
+import { displayName, humanizeStatus, taskRef } from '@/lib/format'
 
 export function StoryModal({
   open,
@@ -60,7 +60,7 @@ export function StoryModal({
       open={open}
       onClose={onClose}
       wide
-      title={editing ? `Edit story${story ? ` · NS-${story.ref}` : ''}` : 'New story'}
+      title={editing ? `Edit story${story ? ` · ${taskRef(story)}` : ''}` : 'New story'}
       footer={
         <>
           <button className="btn btn-secondary" onClick={onClose}>

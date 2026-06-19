@@ -8,7 +8,7 @@ import { StoryDetail } from '@/components/StoryDetail'
 import { useAuth } from '@/auth/AuthProvider'
 import { ArchiveToggle } from '@/components/Archive'
 import { useEpics, useObjectives, useStories, useTaskStatuses } from '@/lib/api'
-import { epicAlignmentMap, humanizeStatus, isActiveStory, isStoryAligned, isStoryArchived, objectiveProgress } from '@/lib/format'
+import { epicAlignmentMap, humanizeStatus, isActiveStory, isStoryAligned, isStoryArchived, objectiveProgress, taskRef } from '@/lib/format'
 import type { StoryFull } from '@/lib/types'
 
 export function MyWork() {
@@ -110,7 +110,7 @@ export function MyWork() {
                                     {s.epic.title}
                                   </span>
                                 )}
-                                <span className="shrink-0 font-mono text-[11px] text-zinc-400">NS-{s.ref}</span>
+                                <span className="shrink-0 font-mono text-[11px] text-zinc-400">{taskRef(s)}</span>
                               </button>
                             )
                           })}

@@ -197,7 +197,7 @@ export async function syncWorkspace(
 
   // ---- Task statuses + Tasks ----
   const before = await existing('stories')
-  const taskRecs = await fetchAll(T_TASKS, ['Task Name', 'Status', 'Priority Level', 'Estimated hours', 'Associated Epic', 'Task Description', 'DRI'])
+  const taskRecs = await fetchAll(T_TASKS, ['Task Name', 'Status', 'Priority Level', 'Estimated hours', 'Associated Epic', 'Task Description', 'DRI', 'Record ID'])
   const names: string[] = [...optionNames]
   const seen = new Set(optionNames)
   for (const r of taskRecs) {
@@ -215,8 +215,10 @@ export async function syncWorkspace(
   const stRows = taskRecs.map((r) => {
     const ep = epByAt.get(first(r.fields['Associated Epic']) ?? '')
     const hours = r.fields['Estimated hours']
+    const recordId = r.fields['Record ID']
     return {
       workspace_id: W, airtable_id: r.id,
+      mamamia_no: typeof recordId === 'number' ? recordId : null,
       title: String(r.fields['Task Name'] ?? '(untitled task)'),
       description: (r.fields['Task Description'] as string) ?? null,
       status: (r.fields['Status'] as string) ?? null,

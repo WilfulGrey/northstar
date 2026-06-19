@@ -24,7 +24,8 @@ import {
 } from '@/lib/api'
 import { ArchivedTag } from './Archive'
 import { AttachButton, AttachmentList, filesFromEvent } from './Attachments'
-import { displayName, humanizeStatus, isStoryArchived, timeAgo } from '@/lib/format'
+import { ArchiveIcon, CheckIcon, ChevronDown, ChevronUp, LinkIcon, TrashIcon } from './icons'
+import { displayName, humanizeStatus, isStoryArchived, taskRef, timeAgo } from '@/lib/format'
 import {
   STORY_PRIORITY,
   type Activity,
@@ -34,7 +35,17 @@ import {
   type StoryPriority,
 } from '@/lib/types'
 
-export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: () => void }) {
+export function StoryDetail({
+  storyId,
+  onClose,
+  orderedIds,
+  onNavigate,
+}: {
+  storyId: string
+  onClose: () => void
+  orderedIds?: string[] // visible tasks in display order, for prev/next chevrons
+  onNavigate?: (id: string) => void
+}) {
   const { data: stories } = useStories()
   const { data: profiles = [] } = useProfiles()
   const { data: epics = [] } = useEpics()
@@ -97,6 +108,11 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
     )
   }
 
+  const canNav = !!(orderedIds && onNavigate)
+  const navIdx = canNav ? orderedIds!.indexOf(storyId) : -1
+  const prevId = navIdx > 0 ? orderedIds![navIdx - 1] : null
+  const nextId = navIdx >= 0 && navIdx < orderedIds!.length - 1 ? orderedIds![navIdx + 1] : null
+
   return (
     <Drawer open onClose={onClose} maxWidth={580}>
       {!story ? (
@@ -134,38 +150,59 @@ export function StoryDetail({ storyId, onClose }: { storyId: string; onClose: ()
             </div>
           )}
           <header className="flex items-center justify-between border-b border-zinc-100 px-5 py-3">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-zinc-400">NS-{story.ref}</span>
+            <div className="flex items-center gap-1.5">
+              {canNav && (
+                <div className="mr-1 flex items-center">
+                  <IconBtn
+                    label="Previous task"
+                    disabled={!prevId}
+                    onClick={() => prevId && onNavigate!(prevId)}
+                  >
+                    <ChevronUp />
+                  </IconBtn>
+                  <IconBtn
+                    label="Next task"
+                    disabled={!nextId}
+                    onClick={() => nextId && onNavigate!(nextId)}
+                  >
+                    <ChevronDown />
+                  </IconBtn>
+                </div>
+              )}
+              <span className="font-mono text-xs text-zinc-400">{taskRef(story)}</span>
               {isStoryArchived(story) && <ArchivedTag />}
             </div>
             <div className="flex items-center gap-1">
-              <button
-                className="btn btn-ghost px-2 text-xs"
-                onClick={() => set({ archived_at: story.archived_at ? null : new Date().toISOString() })}
-              >
-                {story.archived_at ? 'Unarchive' : 'Archive'}
-              </button>
-              <button
-                className="btn btn-ghost px-2 text-xs"
+              <IconBtn
+                label={copied ? 'Link copied' : 'Copy link'}
                 onClick={() => {
-                  navigator.clipboard?.writeText(`${window.location.origin}/board?story=NS-${story.ref}`)
+                  navigator.clipboard?.writeText(`${window.location.origin}/board?story=${taskRef(story)}`)
                   setCopied(true)
                   setTimeout(() => setCopied(false), 1500)
                 }}
               >
-                {copied ? 'Copied!' : 'Copy link'}
-              </button>
-              <button
-                className="btn btn-danger px-2 text-xs"
+                {copied ? <CheckIcon className="text-emerald-600" /> : <LinkIcon />}
+              </IconBtn>
+              <span className="mx-1 h-5 w-px bg-zinc-200" aria-hidden="true" />
+              <IconBtn
+                label={story.archived_at ? 'Unarchive' : 'Archive'}
+                onClick={() => set({ archived_at: story.archived_at ? null : new Date().toISOString() })}
+              >
+                <ArchiveIcon />
+              </IconBtn>
+              <IconBtn
+                label="Delete"
+                danger
                 onClick={() => {
                   if (confirm('Delete this story?')) del.mutate(story.id)
                 }}
               >
-                Delete
-              </button>
-              <button className="btn btn-ghost px-2" onClick={onClose} aria-label="Close">
-                ✕
-              </button>
+                <TrashIcon />
+              </IconBtn>
+              <span className="mx-1 h-5 w-px bg-zinc-200" aria-hidden="true" />
+              <IconBtn label="Close" onClick={onClose}>
+                <span className="text-base leading-none">✕</span>
+              </IconBtn>
             </div>
           </header>
 
@@ -295,6 +332,36 @@ function hasFiles(e: { dataTransfer?: DataTransfer | null }): boolean {
 
 function PropLabel({ children }: { children: ReactNode }) {
   return <span className="text-xs font-medium text-zinc-500">{children}</span>
+}
+
+/** Square ghost icon button used across the drawer header. */
+function IconBtn({
+  children,
+  label,
+  onClick,
+  disabled,
+  danger,
+}: {
+  children: ReactNode
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent ${
+        danger ? 'hover:bg-red-50 hover:text-red-600' : ''
+      }`}
+    >
+      {children}
+    </button>
+  )
 }
 
 function Timeline({
