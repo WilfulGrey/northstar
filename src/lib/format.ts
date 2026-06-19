@@ -25,21 +25,23 @@ export const isDoneStory = (s: StatusBearing) => categoryOf(s) === 'done'
 export const isCanceledStory = (s: StatusBearing) => categoryOf(s) === 'canceled'
 
 /**
- * Canonical task ref shown to users: Mamamia's "Task ID" format, t-<n>.
- * For synced tasks n is the Airtable "Record ID"; tasks created natively in
- * Northstar (sandbox seed / quick-create) reuse their local id, still as t-<n>.
+ * Canonical ref shown to users: Mamamia's id format. Tasks render t-<n>,
+ * findings f-<n>, where n is the Airtable "Record ID"; items created natively in
+ * Northstar (sandbox seed / quick-create) reuse their local id with the same
+ * prefix.
  */
-export function taskRef(s: { mamamia_no?: number | null; ref: number }): string {
-  return `t-${s.mamamia_no ?? s.ref}`
+export function taskRef(s: { kind?: string | null; mamamia_no?: number | null; ref: number }): string {
+  const prefix = s.kind === 'finding' ? 'f' : 't'
+  return `${prefix}-${s.mamamia_no ?? s.ref}`
 }
 
-/** Parse a task ref back to a story. Resolves 't-<n>' (Mamamia id, then local
+/** Parse a ref back to a story. Resolves 't-<n>'/'f-<n>' (Mamamia id, then local
  *  id) and still understands legacy 'NS-<n>' links. */
 export function findByRef<T extends { mamamia_no?: number | null; ref: number }>(
   list: T[],
   ref: string,
 ): T | undefined {
-  const m = /^t-(\d+)$/i.exec(ref)
+  const m = /^[tf]-(\d+)$/i.exec(ref)
   if (m) {
     const n = Number(m[1])
     return list.find((s) => s.mamamia_no === n) ?? list.find((s) => s.ref === n)

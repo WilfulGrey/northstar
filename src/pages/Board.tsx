@@ -17,7 +17,13 @@ const UNASSIGNED = '__unassigned' // assignee-filter sentinel for "nobody"
 const CAP = 50 // keep the board responsive even after syncing 1000+ tasks
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'none'
 
-export function Board() {
+export function Board({
+  fixedEpicId,
+  heading,
+}: {
+  fixedEpicId?: string // when set, the board is locked to this epic (e.g. the Bugs view)
+  heading?: { title: string; subtitle: string }
+} = {}) {
   const { data: stories, isLoading, error } = useStories()
   const { data: epics = [] } = useEpics()
   const { data: statuses = [] } = useTaskStatuses()
@@ -25,9 +31,11 @@ export function Board() {
   const { profile } = useAuth()
   const update = useUpdateStory()
 
-  const [epicFilter, setEpicFilter] = useState('')
+  const [epicFilterState, setEpicFilter] = useState('')
+  const epicFilter = fixedEpicId ?? epicFilterState
   // undefined = "not touched" → defaults to the current user ("Me"); '' = everyone.
-  const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>(undefined)
+  // A locked-epic view (Bugs) shows everyone's tasks by default.
+  const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>(fixedEpicId ? '' : undefined)
   const me = profile?.id ?? ''
   const assignee = assigneeFilter === undefined ? me : assigneeFilter
   const [showArchived, setShowArchived] = useState(false)
@@ -55,12 +63,13 @@ export function Board() {
   // Deep link from an epic: /board?epic=<id> filters to that epic and shows
   // everyone's tasks (not just "Me"), then cleans the URL.
   useEffect(() => {
+    if (fixedEpicId) return // locked view ignores ?epic=
     const epicParam = searchParams.get('epic')
     if (!epicParam) return
     setEpicFilter(epicParam)
     setAssigneeFilter('')
     setSearchParams((prev) => { prev.delete('epic'); return prev }, { replace: true })
-  }, [searchParams, setSearchParams])
+  }, [searchParams, setSearchParams, fixedEpicId])
 
   function closeDrawer() {
     setOpenId(null)
@@ -126,8 +135,8 @@ export function Board() {
   return (
     <>
       <PageHeader
-        title="Board"
-        subtitle="Drag to move, click to open."
+        title={heading?.title ?? 'Board'}
+        subtitle={heading?.subtitle ?? 'Drag to move, click to open.'}
         action={
           <div className="flex items-center gap-2">
             <div className="flex rounded-md border border-zinc-200 p-0.5">
@@ -173,12 +182,14 @@ export function Board() {
                 </button>
               )}
             </div>
-            <select className="input h-8 w-40 py-1 text-sm" value={epicFilter} onChange={(e) => setEpicFilter(e.target.value)}>
-              <option value="">All epics</option>
-              {epics.map((e) => (
-                <option key={e.id} value={e.id}>{e.title}</option>
-              ))}
-            </select>
+            {!fixedEpicId && (
+              <select className="input h-8 w-40 py-1 text-sm" value={epicFilter} onChange={(e) => setEpicFilter(e.target.value)}>
+                <option value="">All epics</option>
+                {epics.map((e) => (
+                  <option key={e.id} value={e.id}>{e.title}</option>
+                ))}
+              </select>
+            )}
             <ArchiveToggle on={showArchived} onChange={setShowArchived} />
             <button className="btn btn-primary" onClick={() => setCreating(statuses[0]?.name ?? 'backlog')}>
               + New story

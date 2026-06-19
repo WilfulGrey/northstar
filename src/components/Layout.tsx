@@ -12,6 +12,8 @@ const NAV = [
   { to: '/okrs', label: 'OKRs', icon: TargetIcon },
   { to: '/epics', label: 'Epics', icon: LayersIcon },
   { to: '/board', label: 'Board', icon: BoardIcon },
+  { to: '/bugs', label: 'Bugs', icon: BugIcon },
+  { to: '/findings', label: 'Findings', icon: FindingIcon },
   { to: '/team', label: 'Team', icon: TeamIcon },
   { to: '/integrations', label: 'Integrations', icon: PlugIcon },
 ]
@@ -126,4 +128,10 @@ function TeamIcon() {
 }
 function PlugIcon() {
   return base(<><path d="M9 2v6" /><path d="M15 2v6" /><path d="M7 8h10v3a5 5 0 0 1-10 0V8Z" /><path d="M12 16v6" /></>)
+}
+function BugIcon() {
+  return base(<><rect x="8" y="6" width="8" height="14" rx="4" /><path d="M12 6V4" /><path d="m9 3 1.5 2M15 3l-1.5 2" /><path d="M8 11H4M20 11h-4M8 16H4M20 16h-4M8 9 5 7M16 9l3-2M8 18l-3 2M16 18l3 2" /></>)
+}
+function FindingIcon() {
+  return base(<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /><path d="M11 8v3M11 14h.01" /></>)
 }

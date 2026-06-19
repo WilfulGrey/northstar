@@ -229,17 +229,44 @@ test('drawer chevrons step to the next and previous task', async ({ page }) => {
   await page.getByRole('link', { name: 'Board', exact: true }).click()
   await showAllAssignees(page)
 
-  // Open the first card (top of the board order) → Previous is disabled, Next moves on.
-  await page.locator('[data-testid="story-card"]').first().click()
+  // 'Invite teammates flow' sorts first (backlog column, lowest position) → Previous disabled.
+  await page.locator('[data-story-title="Invite teammates flow"]').click()
   const title = page.getByLabel('Story title')
-  const first = await title.inputValue()
+  await expect(title).toHaveValue('Invite teammates flow')
   await expect(page.getByRole('button', { name: 'Previous task' })).toBeDisabled()
 
   await page.getByRole('button', { name: 'Next task' }).click()
-  await expect.poll(() => title.inputValue()).not.toBe(first)
+  await expect.poll(() => title.inputValue()).not.toBe('Invite teammates flow')
 
   await page.getByRole('button', { name: 'Previous task' }).click()
-  await expect(title).toHaveValue(first)
+  await expect(title).toHaveValue('Invite teammates flow')
+})
+
+test('Bugs tab is the board locked to the BUGii!! epic', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Bugs', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Bugs' })).toBeVisible()
+  // A BUGii!! task is shown; a task from another epic is filtered out.
+  await expect(page.locator('[data-story-title="Login button unresponsive on Safari"]')).toBeVisible()
+  await expect(page.locator('[data-story-title="Clean up unused feature flags"]')).toHaveCount(0)
+})
+
+test('Findings tab lists findings, opens an f- drawer, and stays off the board', async ({ page }) => {
+  await login(page)
+  await page.getByRole('link', { name: 'Findings', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Findings' })).toBeVisible()
+
+  const row = page.locator('[data-testid="finding-row"][data-finding-title="Bot replied in the wrong language"]')
+  await expect(row).toBeVisible()
+  await row.click()
+  await expect(page.getByLabel('Story title')).toHaveValue('Bot replied in the wrong language')
+  await expect(page.getByRole('dialog').getByText(/^f-\d+$/).first()).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // Findings never leak into the task board.
+  await page.getByRole('link', { name: 'Board', exact: true }).click()
+  await showAllAssignees(page)
+  await expect(page.locator('[data-story-title="Bot replied in the wrong language"]')).toHaveCount(0)
 })
 
 test('OKR list shows a check-in trend sparkline', async ({ page }) => {

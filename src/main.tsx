@@ -13,6 +13,8 @@ import { MyWork } from './pages/MyWork'
 import { Okrs } from './pages/Okrs'
 import { Epics } from './pages/Epics'
 import { Board } from './pages/Board'
+import { Bugs } from './pages/Bugs'
+import { Findings } from './pages/Findings'
 import { Team } from './pages/Team'
 import { Integrations } from './pages/Integrations'
 
@@ -46,6 +48,8 @@ function App() {
         <Route path="okrs" element={<Okrs />} />
         <Route path="epics" element={<Epics />} />
         <Route path="board" element={<Board />} />
+        <Route path="bugs" element={<Bugs />} />
+        <Route path="findings" element={<Findings />} />
         <Route path="team" element={<Team />} />
         <Route path="integrations" element={<Integrations />} />
       </Route>

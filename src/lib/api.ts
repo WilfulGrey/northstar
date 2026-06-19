@@ -15,6 +15,7 @@ import type {
   Profile,
   Story,
   StoryFull,
+  StoryKind,
   TaskStatus,
 } from './types'
 
@@ -24,6 +25,7 @@ export const keys = {
   objectives: ['objectives'] as const,
   epics: ['epics'] as const,
   stories: ['stories'] as const,
+  findings: ['findings'] as const,
   taskStatuses: ['task_statuses'] as const,
   workspace: ['workspace'] as const,
   comments: (storyId: string) => ['comments', storyId] as const,
@@ -87,28 +89,48 @@ export function useEpics() {
 // Slim list select — no description (richText, the payload bomb) and only the
 // profile fields we render. The story-detail drawer fetches the full row.
 const STORY_LIST_SELECT =
-  'id,ref,mamamia_no,title,status,priority,estimate,epic_id,key_result_id,assignee_id,position,archived_at,created_at,updated_at,' +
+  'id,ref,kind,mamamia_no,title,status,finding_status,priority,estimate,epic_id,key_result_id,assignee_id,position,archived_at,created_at,updated_at,' +
   ' epic:epics(id,title,color,objective_id,archived_at), assignee:profiles(id,full_name,email,avatar_color),' +
   ' key_result:key_results(id,title), status_info:task_statuses(name,category,color,position)'
 
+// Page past the server's 1000-row cap so large workspaces load fully.
+async function fetchStoryList(kind: StoryKind): Promise<StoryFull[]> {
+  const pageSize = 1000
+  const all: StoryFull[] = []
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('stories')
+      .select(STORY_LIST_SELECT)
+      .eq('kind', kind)
+      .order('position', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) throw new Error(error.message)
+    all.push(...((data ?? []) as unknown as StoryFull[]))
+    if (!data || data.length < pageSize) break
+  }
+  return all
+}
+
+// Tasks only — findings (kind='finding') are excluded here so they never leak
+// into the board, My Work, dashboard metrics or the command palette.
 export function useStories() {
+  return useQuery({ queryKey: keys.stories, queryFn: () => fetchStoryList('task') })
+}
+
+// Findings — AI-chatbot bugs/observations, their own tab.
+export function useFindings() {
+  return useQuery({ queryKey: keys.findings, queryFn: () => fetchStoryList('finding') })
+}
+
+// Full single story row by id (any kind) — the detail drawer self-fetches so it
+// works for findings too, which useStories deliberately omits.
+export function useStoryRow(id: string) {
   return useQuery({
-    queryKey: keys.stories,
+    queryKey: ['story-row', id],
     queryFn: async () => {
-      // Page past the server's 1000-row cap so large workspaces load fully.
-      const pageSize = 1000
-      const all: StoryFull[] = []
-      for (let from = 0; ; from += pageSize) {
-        const { data, error } = await supabase
-          .from('stories')
-          .select(STORY_LIST_SELECT)
-          .order('position', { ascending: true })
-          .range(from, from + pageSize - 1)
-        if (error) throw new Error(error.message)
-        all.push(...((data ?? []) as unknown as StoryFull[]))
-        if (!data || data.length < pageSize) break
-      }
-      return all
+      const { data, error } = await supabase.from('stories').select(STORY_LIST_SELECT).eq('id', id).maybeSingle()
+      if (error) throw new Error(error.message)
+      return (data as unknown as StoryFull) ?? null
     },
   })
 }
@@ -487,10 +509,15 @@ export function useRealtimeSync() {
   useEffect(() => {
     const channel = supabase
       .channel('northstar-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, () => invalidate(qc, keys.stories))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, () => {
+        invalidate(qc, keys.stories)
+        invalidate(qc, keys.findings)
+        invalidate(qc, ['story-row'])
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'epics' }, () => {
         invalidate(qc, keys.epics)
         invalidate(qc, keys.stories)
+        invalidate(qc, keys.findings)
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'objectives' }, () => invalidate(qc, keys.objectives))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'key_results' }, () => invalidate(qc, keys.objectives))

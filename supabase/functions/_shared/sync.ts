@@ -45,6 +45,8 @@ export interface SyncSummary {
   key_results: { created: number; updated: number; total: number; skipped: number }
   epics: { created: number; updated: number; total: number }
   stories: { created: number; updated: number; total: number }
+  findings: { created: number; updated: number; total: number }
+  finding_images: number // images re-hosted this run (backfilled gradually, capped per run)
 }
 
 // Native record comments are crawled separately (per-task endpoint, rate-limited)
@@ -110,6 +112,7 @@ export async function syncWorkspace(
   const T_KR = byName('Key Results')?.id
   const T_EPICS = byName('Epics')?.id
   const T_TASKS = byName('Tasks')?.id
+  const T_FINDINGS = byName('Findings')?.id
   if (!T_TASKS) throw new Error('No "Tasks" table found in this base.')
   const statusField = byName('Tasks').fields.find((f: { name: string }) => f.name === 'Status')
   const optionNames: string[] = (statusField?.options?.choices ?? []).map((c: { name: string }) => c.name)
@@ -230,12 +233,82 @@ export async function syncWorkspace(
   })
   await upsert('stories', stRows)
 
+  // ---- Findings (AI chatbot bugs/observations) → stories(kind='finding') ----
+  // Findings mirror tasks but get an f-<record_id> ref and never an epic. Their
+  // ids are disjoint from tasks, so the same `before` set tallies them.
+  let findingsSummary = { created: 0, updated: 0, total: 0 }
+  let findingImages = 0
+  if (T_FINDINGS) {
+    const fRecs = await fetchAll(T_FINDINGS, ['title', 'status', 'priority', 'description', 'dri', 'estimated_hours', 'record_id', 'attachments'])
+    const fRows = fRecs.map((r) => {
+      const rid = r.fields['record_id']
+      const hours = r.fields['estimated_hours']
+      const fstatus = typeof r.fields['status'] === 'string' ? (r.fields['status'] as string).trim() : ''
+      return {
+        workspace_id: W, airtable_id: r.id, kind: 'finding',
+        mamamia_no: typeof rid === 'number' ? rid : null,
+        title: String(r.fields['title'] ?? '(untitled finding)'),
+        description: (r.fields['description'] as string) ?? null,
+        status: null, // findings keep their own status (no task_statuses FK)
+        finding_status: fstatus || null,
+        priority: mapPriority(r.fields['priority']),
+        estimate: typeof hours === 'number' ? Math.round(hours) : null,
+        epic_id: null,
+        assignee_id: teamByAt.get(first(r.fields['dri']) ?? '') ?? null,
+      }
+    })
+    await upsert('stories', fRows)
+    findingsSummary = tally(before, fRows as { airtable_id: string }[])
+
+    // Re-host finding images into Storage (Airtable URLs expire). Capped per run;
+    // the scheduled sync backfills the rest over subsequent passes.
+    const fStoryByAt = new Map<string, string>()
+    for (let from = 0; ; from += 1000) {
+      const { data } = await db.from('stories').select('id,airtable_id').eq('workspace_id', W).eq('kind', 'finding').range(from, from + 999)
+      for (const row of (data ?? []) as { id: string; airtable_id: string }[]) fStoryByAt.set(row.airtable_id, row.id)
+      if (!data || data.length < 1000) break
+    }
+    const haveSrc = new Set<string>()
+    for (let from = 0; ; from += 1000) {
+      const { data } = await db.from('attachments').select('source_airtable_id').eq('workspace_id', W).not('source_airtable_id', 'is', null).range(from, from + 999)
+      for (const row of (data ?? []) as { source_airtable_id: string }[]) haveSrc.add(row.source_airtable_id)
+      if (!data || data.length < 1000) break
+    }
+    const IMG_CAP = 40
+    outer: for (const r of fRecs) {
+      const storyId = fStoryByAt.get(r.id)
+      if (!storyId) continue
+      for (const a of (r.fields['attachments'] as Array<Record<string, unknown>>) ?? []) {
+        if (findingImages >= IMG_CAP) break outer
+        const srcId = a?.id as string | undefined
+        const url = a?.url as string | undefined
+        if (!srcId || !url || haveSrc.has(srcId)) continue
+        try {
+          const resp = await fetch(url)
+          if (!resp.ok) continue
+          const buf = new Uint8Array(await resp.arrayBuffer())
+          const mime = (a.type as string) || resp.headers.get('content-type') || 'application/octet-stream'
+          const path = `${W}/${crypto.randomUUID()}`
+          const up = await db.storage.from('attachments').upload(path, buf, { contentType: mime, upsert: false })
+          if (up.error) continue
+          const { error } = await db.from('attachments').insert({
+            workspace_id: W, story_id: storyId, uploaded_by: null, path,
+            file_name: (a.filename as string) || 'image', mime_type: mime,
+            size_bytes: (a.size as number) ?? buf.byteLength, source_airtable_id: srcId,
+          })
+          if (!error) { haveSrc.add(srcId); findingImages++ }
+        } catch { /* skip a single image and keep going */ }
+      }
+    }
+  }
+
   const now = new Date().toISOString()
   await db.from('workspaces').update({ airtable_base_id: baseId, last_sync_at: now }).eq('id', W)
 
   return {
     ms: Date.now() - started, statuses: names.length, people: teamByAt.size,
     objectives: objSummary, key_results: krSummary, epics: epSummary, stories: tally(before, stRows),
+    findings: findingsSummary, finding_images: findingImages,
   }
 }
 
@@ -258,16 +331,18 @@ export async function syncCommentsBatch(
   const meta = await metaRes.json()
   if (meta.error) throw new Error(`Airtable schema: ${JSON.stringify(meta.error)}`)
   const T_TASKS = meta.tables.find((t: { name: string }) => t.name.toLowerCase() === 'tasks')?.id
+  const T_FINDINGS = meta.tables.find((t: { name: string }) => t.name.toLowerCase() === 'findings')?.id
   if (!T_TASKS) throw new Error('No "Tasks" table found in this base.')
 
-  // Page past the 1000-row cap so every task is covered.
-  const storyRows: { id: string; airtable_id: string }[] = []
+  // Page past the 1000-row cap so every story is covered. Findings carry their
+  // comments in the Findings table, tasks in Tasks — pick the table per record.
+  const storyRows: { id: string; airtable_id: string; kind: string }[] = []
   for (let from = 0; ; from += 1000) {
-    const { data } = await db.from('stories').select('id,airtable_id').eq('workspace_id', W).not('airtable_id', 'is', null).range(from, from + 999)
-    storyRows.push(...((data ?? []) as { id: string; airtable_id: string }[]))
+    const { data } = await db.from('stories').select('id,airtable_id,kind').eq('workspace_id', W).not('airtable_id', 'is', null).range(from, from + 999)
+    storyRows.push(...((data ?? []) as { id: string; airtable_id: string; kind: string }[]))
     if (!data || data.length < 1000) break
   }
-  const storyByAt = new Map(storyRows.map((s) => [s.airtable_id, s.id]))
+  const storyByAt = new Map(storyRows.map((s) => [s.airtable_id, { id: s.id, kind: s.kind }]))
   const { data: profs } = await db.from('profiles').select('id,email').eq('workspace_id', W).not('email', 'is', null)
   const profByEmail = new Map((profs ?? []).map((p: { id: string; email: string }) => [p.email.toLowerCase(), p.id]))
 
@@ -288,10 +363,12 @@ export async function syncCommentsBatch(
   }
 
   for (const taskAtId of window) {
-    const storyId = storyByAt.get(taskAtId)
+    const story = storyByAt.get(taskAtId)
+    const storyId = story?.id
+    const table = story?.kind === 'finding' ? (T_FINDINGS ?? T_TASKS) : T_TASKS
     let offset: string | undefined
     do {
-      const u = new URL(`https://api.airtable.com/v0/${baseId}/${T_TASKS}/${taskAtId}/comments`)
+      const u = new URL(`https://api.airtable.com/v0/${baseId}/${table}/${taskAtId}/comments`)
       u.searchParams.set('pageSize', '100')
       if (offset) u.searchParams.set('offset', offset)
       const r = await fetch(u, { headers: at })

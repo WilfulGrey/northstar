@@ -128,13 +128,17 @@ export interface Activity {
   actor?: Profile | null
 }
 
+export type StoryKind = 'task' | 'finding'
+
 export interface Story {
   id: string
   ref: number
+  kind?: StoryKind // 'finding' = AI-chatbot bug/observation (rendered f-<n>); else a task
   mamamia_no?: number | null // Airtable "Record ID"; shown as Mamamia's "Task ID" (t-<n>)
   title: string
   description: string | null
   status: string | null
+  finding_status?: string | null // findings carry their own status (no task_statuses FK)
   priority: StoryPriority
   estimate: number | null
   epic_id: string | null

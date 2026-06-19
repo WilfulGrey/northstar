@@ -16,8 +16,8 @@ import {
   useEpics,
   useObjectives,
   useProfiles,
-  useStories,
   useStory,
+  useStoryRow,
   useTaskStatuses,
   useUpdateStory,
   useUploadAttachment,
@@ -46,7 +46,7 @@ export function StoryDetail({
   orderedIds?: string[] // visible tasks in display order, for prev/next chevrons
   onNavigate?: (id: string) => void
 }) {
-  const { data: stories } = useStories()
+  const { data: story = null, isFetched: storyFetched } = useStoryRow(storyId)
   const { data: profiles = [] } = useProfiles()
   const { data: epics = [] } = useEpics()
   const { data: objectives = [] } = useObjectives()
@@ -62,8 +62,6 @@ export function StoryDetail({
   const [copied, setCopied] = useState(false)
   const [dragging, setDragging] = useState(false)
   const dragDepth = useRef(0)
-
-  const story = stories?.find((s) => s.id === storyId) ?? null
 
   const storyAttachments = useMemo(() => attachments.filter((a) => a.comment_id == null), [attachments])
   const attByComment = useMemo(() => {
@@ -89,8 +87,8 @@ export function StoryDetail({
 
   // If the story disappears (deleted), close the drawer.
   useEffect(() => {
-    if (stories && !story) onClose()
-  }, [stories, story, onClose])
+    if (storyFetched && !story) onClose()
+  }, [storyFetched, story, onClose])
 
   const profilesById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles])
   const epicsById = useMemo(() => new Map(epics.map((e) => [e.id, e])), [epics])
@@ -103,6 +101,7 @@ export function StoryDetail({
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: keys.activity(story.id) })
           qc.invalidateQueries({ queryKey: ['story', story.id] })
+          qc.invalidateQueries({ queryKey: ['story-row', story.id] })
         },
       },
     )
@@ -220,12 +219,23 @@ export function StoryDetail({
 
             <div className="mt-4 grid grid-cols-[110px_1fr] items-center gap-y-2.5 rounded-lg border border-zinc-100 bg-zinc-50/60 px-4 py-3 text-sm">
               <PropLabel>Status</PropLabel>
-              <select className="prop-select" aria-label="Story status" value={story.status ?? ''} onChange={(e) => set({ status: e.target.value })}>
-                {story.status == null && <option value="">No status</option>}
-                {statuses.map((s) => (
-                  <option key={s.name} value={s.name}>{humanizeStatus(s.name)}</option>
-                ))}
-              </select>
+              {story.kind === 'finding' ? (
+                // Findings keep their own status vocabulary (read-only here).
+                <span className="inline-flex items-center gap-1.5 px-1 py-1 text-sm text-zinc-700" aria-label="Finding status">
+                  <span className="h-2 w-2 rounded-full bg-zinc-300" />
+                  {humanizeStatus(story.finding_status)}
+                </span>
+              ) : (
+                <select className="prop-select" aria-label="Story status" value={story.status ?? ''} onChange={(e) => set({ status: e.target.value })}>
+                  {story.status == null && <option value="">No status</option>}
+                  {story.status != null && !statuses.some((s) => s.name === story.status) && (
+                    <option value={story.status}>{humanizeStatus(story.status)}</option>
+                  )}
+                  {statuses.map((s) => (
+                    <option key={s.name} value={s.name}>{humanizeStatus(s.name)}</option>
+                  ))}
+                </select>
+              )}
 
               <PropLabel>Priority</PropLabel>
               <select className="prop-select" aria-label="Story priority" value={story.priority} onChange={(e) => set({ priority: e.target.value as StoryPriority })}>

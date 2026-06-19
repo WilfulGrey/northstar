@@ -161,6 +161,7 @@ async function main() {
     { key: 'design', title: 'Design system & micro-interactions', obj: 'delight', kr: 'ttc', owner: 'maya', status: 'in_progress', color: '#8b5cf6' },
     { key: 'cmdk', title: 'Command palette & shortcuts', obj: 'delight', kr: 'ttc', owner: 'sofia', status: 'planned', color: '#0ea5e9' },
     { key: 'tooling', title: 'Internal tooling cleanup', obj: null, kr: null, owner: 'sofia', status: 'backlog', color: '#64748b' },
+    { key: 'bugs', title: 'BUGii!!', obj: null, kr: null, owner: 'leo', status: 'in_progress', color: '#ef4444' },
   ]
   const epics = await insert('epics', epicDefs.map((e) => ({
     workspace_id: W, title: e.title, status: e.status, color: e.color,
@@ -189,6 +190,8 @@ async function main() {
     ['Migrate legacy seed scripts', 'in_progress', 'low', 2, 'tooling', 'sofia', null],
     ['Clean up unused feature flags', 'todo', 'low', 1, 'tooling', 'demo', null],
     ['Spike: evaluate analytics vendors', 'todo', 'low', 2, null, 'demo', null],
+    ['Login button unresponsive on Safari', 'todo', 'high', 1, 'bugs', 'leo', null],
+    ['Chart tooltip shows a stale value', 'in_progress', 'medium', 1, 'bugs', 'maya', null],
   ]
   const insertedStories = await insert('stories', storyDefs.map(([title, status, priority, estimate, epic, assignee, kr], i) => ({
     workspace_id: W, title, status, priority, estimate,
@@ -202,8 +205,23 @@ async function main() {
     ['Seed a sample workspace on signup', 'maya', 'Sample workspace lands on first login. Open question: do we wipe it once a real story is created?'],
   ].filter(([t]) => storyByTitle[t]).map(([t, who, body]) => ({ workspace_id: W, story_id: storyByTitle[t], author_id: pid[who], body })))
 
+  console.log('→ demo findings (AI-chatbot bugs/observations)…')
+  const findingDefs = [
+    ['Bot replied in the wrong language', 'in progress', 'high', 'maya'],
+    ['Duplicate follow-up message sent', 'to discuss', 'medium', 'leo'],
+    ['Missing status for paired records', 'done', 'low', 'sofia'],
+    ['Suggested reply was off-topic', 'backlog', 'medium', 'demo'],
+  ]
+  const findings = await insert('stories', findingDefs.map(([title, fstatus, priority, who], i) => ({
+    workspace_id: W, kind: 'finding', title, finding_status: fstatus, status: null,
+    priority, assignee_id: pid[who], position: 1000 + i,
+  })))
+  await insert('comments', [
+    { workspace_id: W, story_id: findings[0].id, author_id: pid['maya'], body: 'Repro: user wrote in PL, bot answered in EN. Prompt fix queued.' },
+  ])
+
   console.log(`\n✓ Seed complete.`)
-  console.log(`  Demo workspace: ${objectiveDefs.length} objectives, ${krDefs.length} KRs, ${epicDefs.length} epics, ${storyDefs.length} stories.`)
+  console.log(`  Demo workspace: ${objectiveDefs.length} objectives, ${krDefs.length} KRs, ${epicDefs.length} epics, ${storyDefs.length} stories, ${findingDefs.length} findings.`)
   console.log(`  Sign in — demo:    demo@northstar.app / ${DEMO_PASSWORD}`)
   console.log(`  Sign in — mamamia: mamamia@northstar.app / ${MAMAMIA_PASSWORD} (empty; populate via Integrations → Sync)`)
 }
